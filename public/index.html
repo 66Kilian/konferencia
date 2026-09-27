@@ -1,0 +1,323 @@
+<!doctype html>
+<html lang="hu">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Tárgyaló</title>
+  <meta name="theme-color" content="#0b0c10" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%237c5cff'/%3E%3Cpath d='M9 11h9a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2v-6a2 2 0 0 1 2-2Zm11 4 5-3v8l-5-3' fill='white'/%3E%3C/svg%3E" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <!-- Ikonkészlet (Lucide alapján) -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <symbol id="i-mic" viewBox="0 0 24 24"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><path d="M12 19v3"/></symbol>
+      <symbol id="i-mic-off" viewBox="0 0 24 24"><path d="m2 2 20 20"/><path d="M18.89 13.23A7.12 7.12 0 0 0 19 12v-2"/><path d="M5 10v2a7 7 0 0 0 12 5"/><path d="M15 9.34V5a3 3 0 0 0-5.68-1.33"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12"/><path d="M12 19v3"/></symbol>
+      <symbol id="i-cam" viewBox="0 0 24 24"><path d="m16 13 5.223 3.482a.5.5 0 0 0 .777-.416V7.87a.5.5 0 0 0-.752-.432L16 10.5"/><rect x="2" y="6" width="14" height="12" rx="2"/></symbol>
+      <symbol id="i-cam-off" viewBox="0 0 24 24"><path d="M10.66 6H14a2 2 0 0 1 2 2v2.5l5.248-3.062A.5.5 0 0 1 22 7.87v8.196"/><path d="M16 16a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h2"/><path d="m2 2 20 20"/></symbol>
+      <symbol id="i-screen" viewBox="0 0 24 24"><path d="m9 10 3-3 3 3"/><path d="M12 13V7"/><rect width="20" height="14" x="2" y="3" rx="2"/><path d="M12 17v4"/><path d="M8 21h8"/></symbol>
+      <symbol id="i-chat" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></symbol>
+      <symbol id="i-users" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></symbol>
+      <symbol id="i-leave" viewBox="0 0 24 24"><path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7 2 2 0 0 1 1.72 2v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.42 19.42 0 0 1-3.33-2.67m-2.67-3.34a19.79 19.79 0 0 1-3.07-8.63A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91"/><path d="M22 2 2 22"/></symbol>
+      <symbol id="i-smile" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><path d="M9 9h.01"/><path d="M15 9h.01"/></symbol>
+      <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></symbol>
+      <symbol id="i-plus" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M12 5v14"/></symbol>
+      <symbol id="i-calendar" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h18"/></symbol>
+      <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></symbol>
+      <symbol id="i-logout" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/></symbol>
+      <symbol id="i-send" viewBox="0 0 24 24"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></symbol>
+      <symbol id="i-clip" viewBox="0 0 24 24"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></symbol>
+      <symbol id="i-download" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/></symbol>
+      <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></symbol>
+      <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></symbol>
+      <symbol id="i-zap" viewBox="0 0 24 24"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></symbol>
+      <symbol id="i-file" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></symbol>
+      <symbol id="i-back" viewBox="0 0 24 24"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></symbol>
+      <symbol id="i-copy" viewBox="0 0 24 24"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></symbol>
+      <symbol id="i-expand" viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></symbol>
+      <symbol id="i-lock" viewBox="0 0 24 24"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></symbol>
+      <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+    </defs>
+  </svg>
+
+  <div class="bg-aura" aria-hidden="true"><span></span><span></span><span></span></div>
+
+  <!-- ============================ BELÉPÉS ============================ -->
+  <section id="view-auth" class="view auth" hidden>
+    <div class="auth-card">
+      <div class="brand brand-lg">
+        <div class="brand-mark"><svg class="i"><use href="#i-cam"/></svg></div>
+        <div>
+          <div class="brand-name">Tárgyaló</div>
+          <div class="brand-sub">Privát konferenciaterem</div>
+        </div>
+      </div>
+
+      <!-- Belépés: fiók kiválasztása -->
+      <div class="auth-step" data-step="pick">
+        <h1>Ki vagy?</h1>
+        <p class="muted">Válaszd ki a fiókod, majd írd be a 4 jegyű kódod.</p>
+        <div id="user-picker" class="user-picker"></div>
+        <button class="btn btn-ghost btn-block" data-go="reg-name"><svg class="i"><use href="#i-plus"/></svg>Új fiók létrehozása</button>
+      </div>
+
+      <!-- Belépés: PIN -->
+      <div class="auth-step" data-step="login-pin">
+        <button class="link-back" data-go="pick"><svg class="i"><use href="#i-back"/></svg>Vissza</button>
+        <div class="auth-who" id="login-who"></div>
+        <h1>Add meg a kódod</h1>
+        <div class="pin" id="pin-login"></div>
+        <p class="form-error" id="login-error"></p>
+      </div>
+
+      <!-- Regisztráció 1: név és szerep -->
+      <div class="auth-step" data-step="reg-name">
+        <button class="link-back" data-go="pick"><svg class="i"><use href="#i-back"/></svg>Vissza</button>
+        <div class="steps"><i class="on"></i><i></i><i></i></div>
+        <h1>Hogy hívnak?</h1>
+        <form id="reg-name-form" class="stack">
+          <label class="field">
+            <span>Név</span>
+            <input id="reg-name" autocomplete="off" maxlength="32" placeholder="pl. Kilian" required />
+          </label>
+          <div class="field">
+            <span>Szereped</span>
+            <div class="segmented" id="reg-role">
+              <button type="button" data-role="CEO" class="on">CEO</button>
+              <button type="button" data-role="Programozó">Programozó</button>
+              <button type="button" data-role="SEO">SEO</button>
+              <button type="button" data-role="">Egyéb…</button>
+            </div>
+            <input id="reg-role-custom" maxlength="40" placeholder="Írd be a szereped" hidden />
+          </div>
+          <p class="form-error" id="reg-name-error"></p>
+          <button class="btn btn-primary btn-block" type="submit">Tovább</button>
+        </form>
+      </div>
+
+      <!-- Regisztráció 2: PIN -->
+      <div class="auth-step" data-step="reg-pin">
+        <button class="link-back" data-go="reg-name"><svg class="i"><use href="#i-back"/></svg>Vissza</button>
+        <div class="steps"><i class="on"></i><i class="on"></i><i></i></div>
+        <h1>Válassz egy 4 jegyű kódot</h1>
+        <p class="muted">Ezzel fogsz belépni minden alkalommal.</p>
+        <div class="pin" id="pin-reg1"></div>
+      </div>
+
+      <!-- Regisztráció 3: PIN megerősítés -->
+      <div class="auth-step" data-step="reg-pin2">
+        <button class="link-back" data-go="reg-pin"><svg class="i"><use href="#i-back"/></svg>Vissza</button>
+        <div class="steps"><i class="on"></i><i class="on"></i><i class="on"></i></div>
+        <h1>Még egyszer, ellenőrzésképp</h1>
+        <p class="muted">Írd be újra ugyanazt a kódot.</p>
+        <div class="pin" id="pin-reg2"></div>
+        <p class="form-error" id="reg-pin-error"></p>
+      </div>
+    </div>
+    <p class="auth-foot"><svg class="i"><use href="#i-lock"/></svg>A kódot titkosítva tároljuk, csak a hash kerül mentésre.</p>
+  </section>
+
+  <!-- ============================ FŐOLDAL ============================ -->
+  <section id="view-home" class="view home" hidden>
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark"><svg class="i"><use href="#i-cam"/></svg></div>
+        <div class="brand-name">Tárgyaló</div>
+      </div>
+      <div class="topbar-right">
+        <div class="clock" id="home-clock"></div>
+        <div class="me-pill" id="me-pill"></div>
+        <button class="icon-btn" id="btn-logout" title="Kijelentkezés"><svg class="i"><use href="#i-logout"/></svg></button>
+      </div>
+    </header>
+
+    <main class="home-main">
+      <div class="home-hero">
+        <p class="eyebrow" id="home-date"></p>
+        <h1 id="home-greeting"></h1>
+      </div>
+
+      <div class="actions">
+        <button class="action-card action-primary" id="btn-instant">
+          <div class="action-icon"><svg class="i"><use href="#i-zap"/></svg></div>
+          <div>
+            <div class="action-title">Azonnali meeting</div>
+            <div class="action-sub">Indíts most egy hívást, és küldd el a linket</div>
+          </div>
+        </button>
+        <button class="action-card" id="btn-schedule">
+          <div class="action-icon"><svg class="i"><use href="#i-calendar"/></svg></div>
+          <div>
+            <div class="action-title">Meeting meghirdetése</div>
+            <div class="action-sub">Adj nevet, időpontot és napirendet</div>
+          </div>
+        </button>
+      </div>
+
+      <div class="home-grid">
+        <div class="home-col">
+          <div id="live-section" class="section" hidden>
+            <h2 class="section-title"><span class="live-dot"></span>Élő most</h2>
+            <div id="live-list" class="meeting-list"></div>
+          </div>
+          <div class="section">
+            <h2 class="section-title">Következő meetingek</h2>
+            <div id="upcoming-list" class="meeting-list"></div>
+          </div>
+          <details class="section past" id="past-section">
+            <summary class="section-title">Korábbi meetingek <span class="count" id="past-count"></span></summary>
+            <div id="past-list" class="meeting-list"></div>
+          </details>
+        </div>
+        <aside class="home-side">
+          <div class="panel">
+            <h2 class="section-title">Csapat</h2>
+            <div id="team-list" class="team-list"></div>
+          </div>
+          <div class="panel tip">
+            <h3>Tipp</h3>
+            <p>Meeting közben <kbd>M</kbd> némít, <kbd>V</kbd> kamerát kapcsol, <kbd>S</kbd> képernyőt oszt meg. Fájlt egyszerűen ráhúzhatsz az ablakra.</p>
+          </div>
+        </aside>
+      </div>
+    </main>
+  </section>
+
+  <!-- ============================ ELŐCSARNOK ============================ -->
+  <section id="view-lobby" class="view lobby" hidden>
+    <header class="topbar">
+      <button class="btn btn-ghost" data-nav="#/"><svg class="i"><use href="#i-back"/></svg>Vissza</button>
+    </header>
+    <div class="lobby-main">
+      <div class="lobby-preview">
+        <div class="tile tile-lobby" id="lobby-tile">
+          <video id="lobby-video" autoplay playsinline muted></video>
+          <div class="tile-avatar" id="lobby-avatar"></div>
+          <div class="meter" id="lobby-meter"><i></i><i></i><i></i><i></i><i></i></div>
+        </div>
+        <div class="lobby-controls">
+          <button class="ctrl" id="lobby-mic" title="Mikrofon"><svg class="i"><use href="#i-mic"/></svg></button>
+          <button class="ctrl" id="lobby-cam" title="Kamera"><svg class="i"><use href="#i-cam"/></svg></button>
+        </div>
+        <div class="device-row">
+          <label class="field field-sm"><span>Mikrofon</span><select id="sel-mic"></select></label>
+          <label class="field field-sm"><span>Kamera</span><select id="sel-cam"></select></label>
+        </div>
+      </div>
+      <div class="lobby-info">
+        <p class="eyebrow" id="lobby-when"></p>
+        <h1 id="lobby-title"></h1>
+        <p class="muted" id="lobby-desc"></p>
+        <div class="lobby-live" id="lobby-live"></div>
+        <button class="btn btn-primary btn-lg" id="btn-join">Csatlakozás</button>
+        <button class="btn btn-ghost" id="btn-copy-lobby"><svg class="i"><use href="#i-link"/></svg>Meghívó link másolása</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================ HÍVÁS ============================ -->
+  <section id="view-room" class="view room" hidden>
+    <header class="room-top">
+      <div class="room-title">
+        <span class="rec-dot"></span>
+        <strong id="room-title"></strong>
+        <span class="room-timer" id="room-timer">00:00</span>
+      </div>
+      <button class="btn btn-ghost btn-sm" id="btn-copy-room"><svg class="i"><use href="#i-link"/></svg>Link másolása</button>
+    </header>
+
+    <div class="room-body">
+      <div class="stage" id="stage"></div>
+
+      <aside class="side" id="side" hidden>
+        <div class="side-head">
+          <div class="tabs">
+            <button data-tab="chat" class="on">Chat</button>
+            <button data-tab="people">Résztvevők <span id="people-count"></span></button>
+            <button data-tab="files">Fájlok <span id="files-count"></span></button>
+          </div>
+          <button class="icon-btn" id="btn-side-close" title="Bezárás"><svg class="i"><use href="#i-x"/></svg></button>
+        </div>
+
+        <div class="tab-pane" data-pane="chat">
+          <div class="messages" id="messages"></div>
+          <div class="uploads" id="uploads"></div>
+          <form class="composer" id="composer">
+            <button type="button" class="icon-btn" id="btn-attach" title="Fájl csatolása"><svg class="i"><use href="#i-clip"/></svg></button>
+            <textarea id="chat-input" rows="1" placeholder="Üzenet…" maxlength="4000"></textarea>
+            <button type="submit" class="icon-btn icon-btn-primary" title="Küldés"><svg class="i"><use href="#i-send"/></svg></button>
+            <input type="file" id="file-input" multiple hidden />
+          </form>
+        </div>
+        <div class="tab-pane" data-pane="people" hidden><div id="people-list" class="team-list"></div></div>
+        <div class="tab-pane" data-pane="files" hidden><div id="files-list" class="files-list"></div></div>
+      </aside>
+    </div>
+
+    <footer class="controls">
+      <div class="controls-left" id="room-clock"></div>
+      <div class="controls-center">
+        <button class="ctrl" id="ctl-mic" title="Mikrofon (M)"><svg class="i"><use href="#i-mic"/></svg></button>
+        <button class="ctrl" id="ctl-cam" title="Kamera (V)"><svg class="i"><use href="#i-cam"/></svg></button>
+        <button class="ctrl" id="ctl-screen" title="Képernyőmegosztás (S)"><svg class="i"><use href="#i-screen"/></svg></button>
+        <div class="react-wrap">
+          <button class="ctrl" id="ctl-react" title="Reakció"><svg class="i"><use href="#i-smile"/></svg></button>
+          <div class="react-pop" id="react-pop" hidden>
+            <button>👍</button><button>❤️</button><button>😂</button><button>🎉</button><button>👏</button><button>🔥</button><button>🤔</button>
+          </div>
+        </div>
+        <button class="ctrl ctrl-danger" id="ctl-leave" title="Kilépés"><svg class="i"><use href="#i-leave"/></svg></button>
+      </div>
+      <div class="controls-right">
+        <button class="ctrl ctrl-sm" id="ctl-people" title="Résztvevők"><svg class="i"><use href="#i-users"/></svg></button>
+        <button class="ctrl ctrl-sm" id="ctl-files" title="Fájlok"><svg class="i"><use href="#i-file"/></svg></button>
+        <button class="ctrl ctrl-sm" id="ctl-chat" title="Chat"><svg class="i"><use href="#i-chat"/></svg><span class="badge" id="chat-badge" hidden></span></button>
+      </div>
+    </footer>
+
+    <div class="drop-overlay" id="drop-overlay" hidden>
+      <div><svg class="i"><use href="#i-download"/></svg><p>Engedd el a feltöltéshez</p></div>
+    </div>
+  </section>
+
+  <!-- ============================ MEETING MEGHIRDETÉSE ============================ -->
+  <dialog id="dlg-schedule" class="dialog">
+    <form method="dialog" id="schedule-form" class="stack">
+      <div class="dialog-head">
+        <h2>Meeting meghirdetése</h2>
+        <button type="button" class="icon-btn" data-close><svg class="i"><use href="#i-x"/></svg></button>
+      </div>
+      <label class="field"><span>Cím</span><input name="title" maxlength="80" placeholder="pl. Heti sprint egyeztetés" required /></label>
+      <label class="field"><span>Napirend / leírás</span><textarea name="description" rows="3" maxlength="600" placeholder="Miről lesz szó?"></textarea></label>
+      <div class="row">
+        <label class="field"><span>Nap</span><input name="date" type="date" required /></label>
+        <label class="field"><span>Kezdés</span><input name="time" type="time" required /></label>
+        <label class="field"><span>Hossz</span>
+          <select name="durationMin">
+            <option value="15">15 perc</option>
+            <option value="30" selected>30 perc</option>
+            <option value="45">45 perc</option>
+            <option value="60">1 óra</option>
+            <option value="90">1,5 óra</option>
+            <option value="120">2 óra</option>
+          </select>
+        </label>
+      </div>
+      <p class="form-error" id="schedule-error"></p>
+      <div class="dialog-foot">
+        <button type="button" class="btn btn-ghost" data-close>Mégse</button>
+        <button type="submit" class="btn btn-primary"><svg class="i"><use href="#i-calendar"/></svg>Meghirdetés</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div class="toasts" id="toasts"></div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/app.js"></script>
+</body>
+</html>
