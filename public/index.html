@@ -8,7 +8,7 @@
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%237c5cff'/%3E%3Cpath d='M9 11h9a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2v-6a2 2 0 0 1 2-2Zm11 4 5-3v8l-5-3' fill='white'/%3E%3C/svg%3E" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
@@ -44,6 +44,15 @@
       <symbol id="i-music" viewBox="0 0 24 24"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></symbol>
       <symbol id="i-play" viewBox="0 0 24 24"><path d="M6 3l14 9-14 9z"/></symbol>
       <symbol id="i-minus" viewBox="0 0 24 24"><path d="M5 12h14"/></symbol>
+      <symbol id="i-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></symbol>
+      <symbol id="i-note" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></symbol>
+      <symbol id="i-list" viewBox="0 0 24 24"><path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/></symbol>
+      <symbol id="i-building" viewBox="0 0 24 24"><rect width="16" height="20" x="4" y="2" rx="2"/><path d="M9 22v-4h6v4"/><path d="M8 6h.01"/><path d="M16 6h.01"/><path d="M12 6h.01"/><path d="M12 10h.01"/><path d="M12 14h.01"/><path d="M16 10h.01"/><path d="M16 14h.01"/><path d="M8 10h.01"/><path d="M8 14h.01"/></symbol>
+      <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+      <symbol id="i-edit" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.38 3.62a2.12 2.12 0 1 1 3 3L7.37 18.64a2 2 0 0 1-.86.5l-2.87.84a.5.5 0 0 1-.62-.62l.84-2.87a2 2 0 0 1 .5-.86z"/></symbol>
+      <symbol id="i-velyric" viewBox="0 0 64 56"><path d="M2 9.5c7.6-.9 14.6-.4 18.4 3.2 4.5 4.3 7.2 13.5 12.4 21.8 3.6 5.8 7.2 8.8 12.6 11.4-7.4 5-16.6 7.2-22.2 1.6C17.6 41.9 14.8 28.7 10.3 20.1 8 15.7 5.6 12.6 2 9.5Z" fill="url(#vy-main)" stroke="none"/><path d="M31.3 26.8c4.9-8.1 11.6-15.7 21.6-16.7 3.4-.3 6.7.1 9.1.8-3.8 1.7-7 4.8-10 8.9-4.8 6.6-11.8 8.9-20.7 7Z" fill="url(#vy-wing)" stroke="none"/><path d="M36.6 38.4c5.1-8.1 12-15.2 21.8-15.9 2.4-.2 4.5.1 5.6.4-3.4 1.8-6.1 4.8-8.8 8.7-4.6 6.7-11 8.7-18.6 6.8Z" fill="url(#vy-wing)" stroke="none"/></symbol>
+      <linearGradient id="vy-main" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#E600FF"/><stop offset="0.55" stop-color="#D1005E"/><stop offset="1" stop-color="#FF1740"/></linearGradient>
+      <linearGradient id="vy-wing" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#E0005F"/><stop offset="0.6" stop-color="#FF3D5E"/><stop offset="1" stop-color="#FF9A5C"/></linearGradient>
       <symbol id="i-shield" viewBox="0 0 24 24"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="M12 8v4"/><path d="M12 16h.01"/></symbol>
     </defs>
   </svg>
@@ -197,9 +206,15 @@
   <!-- ============================ FŐOLDAL ============================ -->
   <section id="view-home" class="view home" hidden>
     <header class="topbar">
-      <div class="brand">
-        <div class="brand-mark"><svg class="i"><use href="#i-cam"/></svg></div>
-        <div class="brand-name">Tárgyaló</div>
+      <div class="topbar-left">
+        <div class="brand company-brand">
+          <div class="brand-mark" id="brand-mark"><svg class="i"><use href="#i-cam"/></svg></div>
+          <div class="brand-name" id="brand-name">Tárgyaló</div>
+        </div>
+        <div class="company-switch">
+          <button class="company-btn" id="company-btn" type="button" title="Cég váltása"><svg class="i"><use href="#i-building"/></svg><span id="company-btn-name">Cég</span><svg class="i"><use href="#i-chevron"/></svg></button>
+          <div class="company-menu" id="company-menu" hidden></div>
+        </div>
       </div>
       <div class="topbar-right">
         <div class="clock" id="home-clock"></div>
@@ -219,6 +234,7 @@
       <div class="home-hero">
         <p class="eyebrow" id="home-date"></p>
         <h1 id="home-greeting"></h1>
+        <p class="hero-sub" id="home-company"></p>
       </div>
 
       <div class="actions">
@@ -254,6 +270,22 @@
           </details>
         </div>
         <aside class="home-side">
+          <div class="panel" id="goals-panel">
+            <h2 class="section-title"><svg class="i"><use href="#i-target"/></svg>Célok <span class="count" id="goals-count"></span></h2>
+            <div class="progress"><i id="goals-progress"></i></div>
+            <div class="checklist" id="goals-home"></div>
+            <form class="inline-form" id="goal-form-home">
+              <input id="goal-input-home" maxlength="200" placeholder="Új cél…" autocomplete="off" />
+              <button class="btn btn-sm btn-primary" type="submit"><svg class="i"><use href="#i-plus"/></svg></button>
+            </form>
+          </div>
+          <div class="panel" id="notes-panel">
+            <div class="panel-head">
+              <h2 class="section-title"><svg class="i"><use href="#i-note"/></svg>Jegyzetek <span class="count" id="notes-count"></span></h2>
+              <button class="btn btn-sm btn-ghost" id="btn-note-new" type="button"><svg class="i"><use href="#i-plus"/></svg>Új</button>
+            </div>
+            <div class="notes-list" id="notes-home"></div>
+          </div>
           <div class="panel">
             <h2 class="section-title">Csapat</h2>
             <div id="team-list" class="team-list"></div>
@@ -306,6 +338,14 @@
         <h1 id="lobby-title"></h1>
         <p class="muted" id="lobby-desc"></p>
         <div class="lobby-live" id="lobby-live"></div>
+        <div class="lobby-agenda">
+          <h3><svg class="i"><use href="#i-list"/></svg>Terv a hívásra</h3>
+          <div class="checklist" id="lobby-agenda"></div>
+          <form class="inline-form" id="agenda-form-lobby">
+            <input id="agenda-input-lobby" maxlength="200" placeholder="Új napirendi pont…" autocomplete="off" />
+            <button class="btn btn-sm btn-ghost" type="submit"><svg class="i"><use href="#i-plus"/></svg></button>
+          </form>
+        </div>
         <button class="btn btn-primary btn-lg" id="btn-join">Csatlakozás</button>
         <button class="btn btn-ghost" id="btn-copy-lobby"><svg class="i"><use href="#i-link"/></svg>Meghívó link másolása</button>
       </div>
@@ -320,7 +360,10 @@
         <strong id="room-title"></strong>
         <span class="room-timer" id="room-timer">00:00</span>
       </div>
-      <button class="btn btn-ghost btn-sm" id="btn-copy-room"><svg class="i"><use href="#i-link"/></svg>Link másolása</button>
+      <div class="room-actions">
+        <button class="btn btn-ghost btn-sm" id="btn-minutes" title="Jegyzőkönyv készítése a hívásról"><svg class="i"><use href="#i-note"/></svg><span>Jegyzőkönyv</span></button>
+        <button class="btn btn-ghost btn-sm" id="btn-copy-room"><svg class="i"><use href="#i-link"/></svg><span>Link</span></button>
+      </div>
     </header>
 
     <div class="room-body">
@@ -330,21 +373,42 @@
         <div class="side-head">
           <div class="tabs">
             <button data-tab="chat" class="on">Chat</button>
-            <button data-tab="people">Résztvevők <span id="people-count"></span></button>
+            <button data-tab="agenda">Terv <span id="agenda-count"></span></button>
+            <button data-tab="notes">Jegyzet</button>
+            <button data-tab="people">Emberek <span id="people-count"></span></button>
             <button data-tab="files">Fájlok <span id="files-count"></span></button>
           </div>
           <button class="icon-btn" id="btn-side-close" title="Bezárás"><svg class="i"><use href="#i-x"/></svg></button>
         </div>
 
         <div class="tab-pane" data-pane="chat">
+          <div class="goals-pin" id="goals-pin"></div>
           <div class="messages" id="messages"></div>
           <div class="uploads" id="uploads"></div>
           <form class="composer" id="composer">
             <button type="button" class="icon-btn" id="btn-attach" title="Fájl csatolása"><svg class="i"><use href="#i-clip"/></svg></button>
+            <button type="button" class="icon-btn" id="btn-goal" title="Cél kitűzése (vagy írd: /cél …)"><svg class="i"><use href="#i-target"/></svg></button>
             <textarea id="chat-input" rows="1" placeholder="Üzenet…" maxlength="4000"></textarea>
             <button type="submit" class="icon-btn icon-btn-primary" title="Küldés"><svg class="i"><use href="#i-send"/></svg></button>
             <input type="file" id="file-input" multiple hidden />
           </form>
+        </div>
+        <div class="tab-pane" data-pane="agenda" hidden>
+          <div class="pane-pad">
+            <div class="agenda-head"><span id="agenda-status"></span></div>
+            <div class="progress"><i id="agenda-progress"></i></div>
+            <div class="checklist big" id="room-agenda"></div>
+            <form class="inline-form" id="agenda-form-room">
+              <input id="agenda-input-room" maxlength="200" placeholder="Új napirendi pont…" autocomplete="off" />
+              <button class="btn btn-sm btn-primary" type="submit"><svg class="i"><use href="#i-plus"/></svg></button>
+            </form>
+          </div>
+        </div>
+        <div class="tab-pane" data-pane="notes" hidden>
+          <div class="pane-pad">
+            <button class="btn btn-sm btn-ghost btn-block" id="btn-note-new-room" type="button"><svg class="i"><use href="#i-plus"/></svg>Új jegyzet</button>
+            <div class="notes-list" id="notes-room"></div>
+          </div>
         </div>
         <div class="tab-pane" data-pane="people" hidden><div id="people-list" class="team-list"></div></div>
         <div class="tab-pane" data-pane="files" hidden><div id="files-list" class="files-list"></div></div>
@@ -406,7 +470,8 @@
         <button type="button" class="icon-btn" data-close><svg class="i"><use href="#i-x"/></svg></button>
       </div>
       <label class="field"><span>Cím</span><input name="title" maxlength="80" placeholder="pl. Heti sprint egyeztetés" required /></label>
-      <label class="field"><span>Napirend / leírás</span><textarea name="description" rows="3" maxlength="600" placeholder="Miről lesz szó?"></textarea></label>
+      <label class="field"><span>Leírás</span><textarea name="description" rows="2" maxlength="600" placeholder="Miről lesz szó?"></textarea></label>
+      <label class="field"><span>Napirend / terv – soronként egy pont, a hívásban kipipálhatók</span><textarea name="agenda" rows="4" placeholder="Bemutatkozás&#10;Árazás átbeszélése&#10;Következő lépések"></textarea></label>
       <div class="row">
         <label class="field"><span>Nap</span><input name="date" type="date" required /></label>
         <label class="field"><span>Kezdés</span><input name="time" type="time" required /></label>
@@ -425,6 +490,44 @@
       <div class="dialog-foot">
         <button type="button" class="btn btn-ghost" data-close>Mégse</button>
         <button type="submit" class="btn btn-primary"><svg class="i"><use href="#i-calendar"/></svg>Meghirdetés</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- ============================ JEGYZET ============================ -->
+  <dialog id="dlg-note" class="dialog dialog-wide">
+    <form id="note-form" class="stack">
+      <div class="dialog-head">
+        <input class="note-title" id="note-title" maxlength="100" placeholder="Jegyzet címe" />
+        <button type="button" class="icon-btn" data-close><svg class="i"><use href="#i-x"/></svg></button>
+      </div>
+      <textarea class="note-body" id="note-body" rows="16" maxlength="20000" placeholder="Írj ide – tervek, döntések, teendők…"></textarea>
+      <p class="note-meta" id="note-meta"></p>
+      <div class="dialog-foot">
+        <button type="button" class="btn btn-ghost" id="note-delete"><svg class="i"><use href="#i-trash"/></svg>Törlés</button>
+        <span class="spacer"></span>
+        <button type="button" class="btn btn-ghost" data-close>Mégse</button>
+        <button type="submit" class="btn btn-primary"><svg class="i"><use href="#i-check"/></svg>Mentés</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- ============================ ÚJ CÉG ============================ -->
+  <dialog id="dlg-company" class="dialog">
+    <form id="company-form" class="stack">
+      <div class="dialog-head">
+        <h2>Új cég</h2>
+        <button type="button" class="icon-btn" data-close><svg class="i"><use href="#i-x"/></svg></button>
+      </div>
+      <label class="field"><span>Cég neve</span><input name="name" maxlength="40" required placeholder="pl. PureShine" /></label>
+      <label class="field"><span>Megjelenés</span>
+        <select name="theme"><option value="default">Tárgyaló (saját kiemelőszínnel)</option><option value="velyric">Velyric stílus</option></select>
+      </label>
+      <label class="field"><span>Kiemelőszín</span><input name="accent" type="color" value="#7c5cff" /></label>
+      <p class="form-error" id="company-error"></p>
+      <div class="dialog-foot">
+        <button type="button" class="btn btn-ghost" data-close>Mégse</button>
+        <button type="submit" class="btn btn-primary"><svg class="i"><use href="#i-plus"/></svg>Létrehozás</button>
       </div>
     </form>
   </dialog>

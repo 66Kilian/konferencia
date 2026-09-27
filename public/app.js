@@ -99,6 +99,10 @@
     meetings: [],
     live: {},
     online: [],
+    companyId: local.get('tg_company', 'general'),
+    companies: [],
+    goals: [],
+    notes: [],
     clientId: (crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`).replace(/[^a-z0-9-]/gi, ''),
   };
 
@@ -127,6 +131,7 @@
     $$('.view').forEach((v) => (v.hidden = v.id !== `view-${view}`));
     document.body.classList.toggle('in-room', view === 'room');
     S.view = view;
+    applyTheme();
   }
 
   function route() {
@@ -525,7 +530,7 @@
     try {
       const res = await api('/api/presence', {
         method: 'POST',
-        body: { clientId: S.clientId, roomId: call.id, peerId: call.peerId, since: call.since, state: localState() },
+        body: { clientId: S.clientId, roomId: call.id, peerId: call.peerId, since: call.since, state: localState(), companyId: S.companyId },
       });
       applyPresence(res);
     } catch {
@@ -543,6 +548,17 @@
     S.users = res.users;
     S.meetings = res.meetings;
     S.roles = res.roles || [];
+    S.companies = res.companies || [];
+    if (S.companies.length && !S.companies.some((c) => c.id === S.companyId)) setCompany('general', false);
+    S.goals = res.goals || [];
+    S.notes = res.notes || [];
+    applyTheme();
+    renderGoals();
+    renderNotes();
+    if (call.id && res.agenda) {
+      call.agenda = res.agenda;
+      renderAgenda();
+    }
     S.lockedUsers = res.lockedUsers || [];
     const me = res.users.find((u) => u.id === S.user?.id);
     if (me && me.role !== S.user.role) S.user = { ...S.user, role: me.role };
@@ -656,13 +672,16 @@
   function renderHome() {
     if (!S.user) return;
     const now = new Date();
-    $('#home-greeting').textContent = `${greeting()}, ${S.user.name}!`;
+    $('#home-greeting').innerHTML = `${greeting()}, <span class="grad">${esc(S.user.name)}</span>!`;
+    const company = currentCompany();
+    $('#home-company').textContent =
+      company.theme === 'velyric' ? 'Velyric – MI hangalapú ügynökök · meetingek, célok és jegyzetek egy helyen' : `${company.name} · meetingek, célok és jegyzetek`;
     $('#home-date').textContent = longDate.format(now);
 
     const live = [];
     const upcoming = [];
     const past = [];
-    for (const m of S.meetings) {
+    for (const m of S.meetings.filter((x) => x.companyId === S.companyId)) {
       const { end } = meetingTimes(m);
       if ((S.live[m.id] || []).length) live.push(m);
       else if (end > now) upcoming.push(m);
@@ -821,7 +840,10 @@
 
   $('#btn-instant').addEventListener('click', (e) => busy(e.currentTarget, async () => {
     try {
-      const m = await api('/api/meetings', { method: 'POST', body: { instant: true, title: `${S.user.name} azonnali meetingje` } });
+      const m = await api('/api/meetings', {
+        method: 'POST',
+        body: { instant: true, title: `${S.user.name} azonnali meetingje`, companyId: S.companyId },
+      });
       await copyText(roomUrl(m.id));
       toast(`${icon('check')} Meeting létrehozva – a link a vágólapon`);
       location.hash = `#/room/${m.id}`;
@@ -861,6 +883,8 @@
           description: f.description.value,
           startsAt: startsAt.toISOString(),
           durationMin: Number(f.durationMin.value),
+          companyId: S.companyId,
+          agenda: f.agenda.value.split('\n'),
         },
       });
       dlg.close();
@@ -1172,6 +1196,9 @@
       location.hash = '#/';
       return;
     }
+    if (lobbyMeeting.companyId && lobbyMeeting.companyId !== S.companyId) setCompany(lobbyMeeting.companyId, false);
+    lobbyAgenda = lobbyMeeting.agendaItems || [];
+    renderLobbyAgenda();
     show('lobby');
     const m = lobbyMeeting;
     const { start, end } = meetingTimes(m);
@@ -1241,6 +1268,9 @@
     show('room');
     paintMusicButtons();
 
+    call.agenda = lobbyAgenda;
+    renderAgenda();
+    renderGoals();
     call.localTile = createTile('local', S.user, true);
     paintLocalTile();
     paintControls();
@@ -1615,6 +1645,8 @@
     } else if (d.type === 'reaction' && typeof d.emoji === 'string' && Date.now() - (p.lastReaction || 0) > 300) {
       p.lastReaction = Date.now();
       floatEmoji(p.tile, d.emoji.slice(0, 8));
+    } else if (d.type === 'sync') {
+      poll(); // a másik fél módosította a célokat / jegyzeteket / napirendet
     } else if (d.type === 'music' && typeof d.uri === 'string') {
       onRemoteMusic(p, d);
     } else if (d.type === 'bye') {
@@ -1624,7 +1656,7 @@
 
   function validMsg(m) {
     if (!m || typeof m !== 'object' || !/^[a-f0-9]{12}$/.test(m.id || '') || !m.user?.id) return false;
-    if (m.type === 'text') return typeof m.text === 'string' && m.text.length <= 4000;
+    if (m.type === 'text' || m.type === 'system') return typeof m.text === 'string' && m.text.length <= 4000;
     return m.type === 'file' && /^[a-f0-9]{24}$/.test(m.file?.id || '') && typeof m.file.name === 'string';
   }
 
@@ -1825,6 +1857,11 @@
     call.messages.push(msg);
     const box = $('#messages');
     $('.msg-empty', box)?.remove();
+    if (msg.type === 'system') {
+      box.insertAdjacentHTML('beforeend', `<div class="msg-system"><b>${esc(msg.user.name)}</b> ${esc(msg.text)}</div>`);
+      call.lastGroup = null;
+      return scrollMessages();
+    }
     const ts = new Date(msg.ts);
     const last = call.lastGroup;
     const stickToBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 80;
@@ -1918,10 +1955,28 @@
       files.forEach(uploadFile);
     }
   });
+  let goalMode = false;
+  function setGoalMode(on) {
+    goalMode = on;
+    $('#btn-goal').classList.toggle('on', on);
+    input.placeholder = on ? 'Új cél – Enterrel kitűzöd…' : 'Üzenet…';
+  }
+  $('#btn-goal').addEventListener('click', () => {
+    setGoalMode(!goalMode);
+    input.focus();
+  });
+
   $('#composer').addEventListener('submit', (e) => {
     e.preventDefault();
     const text = input.value.trim();
     if (!text) return;
+    const cmd = /^\/c[ée]l\s+(.+)/is.exec(text);
+    if (goalMode || cmd) {
+      input.value = '';
+      autosize();
+      setGoalMode(false);
+      return createGoal(cmd ? cmd[1].trim() : text);
+    }
     input.value = '';
     autosize();
     postMessage({ type: 'text', text }).catch((err) => {
@@ -2027,6 +2082,380 @@
   });
 
   window.addEventListener('resize', () => call.id && layout());
+
+  // =========================================================================
+  // Cégek – mindegyiknek saját meetingjei, céljai, jegyzetei és kinézete
+  // =========================================================================
+  const FALLBACK_COMPANY = { id: 'general', name: 'Tárgyaló', theme: 'default' };
+  const currentCompany = () => S.companies.find((c) => c.id === S.companyId) || S.companies[0] || FALLBACK_COMPANY;
+
+  function companyDot(c) {
+    if (c.theme === 'velyric') return `<span class="dot"><svg viewBox="0 0 64 56"><use href="#i-velyric"/></svg></span>`;
+    return `<span class="dot" style="background:${esc(c.accent || '#7c5cff')}">${esc(initials(c.name))}</span>`;
+  }
+
+  function applyTheme() {
+    const c = currentCompany();
+    const onAuth = S.view === 'auth' || !S.user;
+    const body = document.body;
+    body.dataset.theme = onAuth ? 'default' : c.theme || 'default';
+    for (const v of ['--accent', '--accent-2', '--accent-soft']) body.style.removeProperty(v);
+    if (!onAuth && c.theme !== 'velyric' && /^#[0-9a-f]{6}$/i.test(c.accent || '')) {
+      body.style.setProperty('--accent', c.accent);
+      body.style.setProperty('--accent-2', c.accent);
+      body.style.setProperty('--accent-soft', `${c.accent}24`);
+    }
+    $('#brand-mark').innerHTML =
+      c.theme === 'velyric' && !onAuth
+        ? '<svg viewBox="0 0 64 56" aria-hidden="true"><use href="#i-velyric"/></svg>'
+        : icon('cam');
+    $('#brand-name').textContent = c.name;
+    $('#company-btn-name').textContent = c.name;
+    $('meta[name="theme-color"]').setAttribute('content', body.dataset.theme === 'velyric' ? '#08090d' : '#0b0c10');
+  }
+
+  function setCompany(id, refresh = true) {
+    if (id === S.companyId) return;
+    S.companyId = id;
+    local.set('tg_company', id);
+    S.goals = [];
+    S.notes = [];
+    applyTheme();
+    if (refresh) {
+      renderHome();
+      poll();
+    }
+  }
+
+  function renderCompanyMenu() {
+    const items = S.companies
+      .map(
+        (c) => `<button class="company-item ${c.id === S.companyId ? 'on' : ''}" data-company="${esc(c.id)}">
+          ${companyDot(c)}<span>${esc(c.name)}<small>${esc(c.domain || (c.theme === 'velyric' ? 'Velyric stílus' : 'saját tér'))}</small></span>
+        </button>`
+      )
+      .join('');
+    const add = S.user?.role === 'CEO' ? `<button class="company-item add" data-company-new>${icon('plus')}Új cég</button>` : '';
+    $('#company-menu').innerHTML = items + add;
+  }
+
+  $('#company-btn').addEventListener('click', (e) => {
+    e.stopPropagation();
+    renderCompanyMenu();
+    $('#company-menu').hidden = !$('#company-menu').hidden;
+  });
+  $('#company-menu').addEventListener('click', (e) => {
+    const item = e.target.closest('[data-company]');
+    if (item) setCompany(item.dataset.company);
+    if (e.target.closest('[data-company-new]')) {
+      $('#company-form').reset();
+      $('#company-error').textContent = '';
+      $('#dlg-company').showModal();
+    }
+    $('#company-menu').hidden = true;
+  });
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('.company-switch')) $('#company-menu').hidden = true;
+  });
+  $('#dlg-company').addEventListener('click', (e) => {
+    if (e.target.closest('[data-close]') || e.target === e.currentTarget) e.currentTarget.close();
+  });
+  $('#company-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const f = e.target;
+    busy($('#company-form button[type=submit]'), async () => {
+      try {
+        const c = await api('/api/companies', { method: 'POST', body: { name: f.name.value, theme: f.theme.value, accent: f.accent.value } });
+        S.companies.push(c);
+        $('#dlg-company').close();
+        toast(`${icon('check')} „${esc(c.name)}” létrehozva`);
+        setCompany(c.id);
+      } catch (err) {
+        $('#company-error').textContent = err.message;
+      }
+    });
+  });
+
+  // =========================================================================
+  // Célok – cégenként, mindig láthatók (főoldal + a hívás chatjének teteje)
+  // =========================================================================
+  const canManageItem = (item) => item.createdBy === S.user?.id || S.user?.role === 'CEO';
+
+  function goalHtml(g) {
+    const by = g.done ? `✓ ${esc(g.doneBy || '')}` : `kitűzte: ${esc(g.createdByName || '')}`;
+    return `<label class="check-item ${g.done ? 'done' : ''}">
+      <input type="checkbox" data-goal="${g.id}" ${g.done ? 'checked' : ''} />
+      <span class="txt">${esc(g.text)}<span class="by">${by}</span></span>
+      ${canManageItem(g) ? `<button type="button" class="icon-btn del" data-goal-del="${g.id}" title="Törlés">${icon('x')}</button>` : ''}
+    </label>`;
+  }
+
+  function renderGoals() {
+    const goals = [...S.goals].sort((a, b) => a.done - b.done);
+    const done = goals.filter((g) => g.done).length;
+    const pct = goals.length ? Math.round((done / goals.length) * 100) : 0;
+    $('#goals-count').textContent = goals.length ? `${done}/${goals.length}` : '';
+    $('#goals-progress').style.width = `${pct}%`;
+    $('#goals-home').innerHTML = goals.length ? goals.map(goalHtml).join('') : '<div class="empty-line">Még nincs kitűzött cél.</div>';
+    $('#goals-pin').innerHTML = goals.length
+      ? `<div class="pin-head">${icon('target')}Célok ${done}/${goals.length}<div class="progress"><i style="width:${pct}%"></i></div></div>${goals.map(goalHtml).join('')}`
+      : '';
+  }
+
+  async function goalAction(method, path, body = {}) {
+    const cid = S.companyId;
+    try {
+      const res = await api(`/api/companies/${cid}/goals${path}`, { method, body: { ...body, roomId: call.id } });
+      if (cid !== S.companyId) return;
+      S.goals = res.goals;
+      renderGoals();
+      if (res.msg) {
+        onChat(res.msg);
+        broadcast({ type: 'chat', msg: res.msg });
+      }
+      broadcast({ type: 'sync' });
+    } catch (err) {
+      toast(esc(err.message), { type: 'error' });
+      poll();
+    }
+  }
+
+  const createGoal = (text) => goalAction('POST', '', { text });
+
+  function onGoalClick(e) {
+    const cb = e.target.closest('[data-goal]');
+    if (cb) return goalAction('POST', `/${cb.dataset.goal}`, { done: cb.checked });
+    const del = e.target.closest('[data-goal-del]');
+    if (del) {
+      e.preventDefault();
+      if (confirm('Törlöd ezt a célt?')) goalAction('DELETE', `/${del.dataset.goalDel}`);
+    }
+  }
+  $('#goals-home').addEventListener('click', onGoalClick);
+  $('#goals-pin').addEventListener('click', onGoalClick);
+  $('#goal-form-home').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const text = $('#goal-input-home').value.trim();
+    if (!text) return;
+    $('#goal-input-home').value = '';
+    createGoal(text);
+  });
+
+  // =========================================================================
+  // Jegyzetek – cégenként, a főoldalon és hívás közben is szerkeszthetők
+  // =========================================================================
+  const shortDate = (ts) => {
+    const d = new Date(ts);
+    return sameDay(d, new Date()) ? `ma ${hm(d)}` : `${monthFmt.format(d)} ${d.getDate()}. ${hm(d)}`;
+  };
+
+  function renderNotes() {
+    const html = S.notes.length
+      ? S.notes
+          .map((n) => `<button class="note-row" data-note="${n.id}"><b>${esc(n.title)}</b><span>${esc(n.updatedBy || '')} · ${shortDate(n.updatedAt)}</span></button>`)
+          .join('')
+      : '<div class="empty-line">Még nincs jegyzet.</div>';
+    $('#notes-home').innerHTML = html;
+    $('#notes-room').innerHTML = html;
+    $('#notes-count').textContent = S.notes.length ? `(${S.notes.length})` : '';
+  }
+
+  const dlgNote = $('#dlg-note');
+  let editingNote = null;
+
+  async function openNote(id) {
+    editingNote = { id: id || null, companyId: S.companyId };
+    $('#note-title').value = '';
+    $('#note-body').value = '';
+    $('#note-meta').textContent = id ? 'Betöltés…' : 'Új jegyzet';
+    $('#note-delete').hidden = !id;
+    dlgNote.showModal(); // az első mezőre (cím) magától ráteszi a fókuszt
+    if (!id) return;
+    try {
+      const n = await api(`/api/companies/${S.companyId}/notes/${id}`);
+      $('#note-title').value = n.title;
+      $('#note-body').value = n.body;
+      $('#note-meta').textContent = `Utoljára módosította: ${n.updatedBy} · ${shortDate(n.updatedAt)}`;
+      $('#note-delete').hidden = !canManageItem(n);
+    } catch (err) {
+      $('#note-meta').textContent = err.message;
+    }
+  }
+
+  async function saveNote(extra = {}) {
+    const { id, companyId } = editingNote;
+    const body = { title: $('#note-title').value, body: $('#note-body').value, meetingId: call.id, ...extra };
+    const res = id
+      ? await api(`/api/companies/${companyId}/notes/${id}`, { method: 'PUT', body })
+      : await api(`/api/companies/${companyId}/notes`, { method: 'POST', body });
+    if (companyId === S.companyId) {
+      S.notes = res.notes;
+      renderNotes();
+    }
+    broadcast({ type: 'sync' });
+    return res;
+  }
+
+  $('#note-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    busy($('#note-form button[type=submit]'), async () => {
+      try {
+        await saveNote();
+        dlgNote.close();
+        toast(`${icon('check')} Jegyzet mentve`);
+      } catch (err) {
+        $('#note-meta').textContent = err.message;
+      }
+    });
+  });
+  $('#note-delete').addEventListener('click', () => {
+    if (!editingNote?.id || !confirm('Biztosan törlöd ezt a jegyzetet?')) return;
+    busy($('#note-delete'), async () => {
+      try {
+        const res = await api(`/api/companies/${editingNote.companyId}/notes/${editingNote.id}`, { method: 'DELETE' });
+        S.notes = res.notes;
+        renderNotes();
+        dlgNote.close();
+        broadcast({ type: 'sync' });
+      } catch (err) {
+        $('#note-meta').textContent = err.message;
+      }
+    });
+  });
+  dlgNote.addEventListener('click', (e) => {
+    if (e.target.closest('[data-close]') || e.target === dlgNote) dlgNote.close();
+  });
+  for (const list of ['#notes-home', '#notes-room']) {
+    $(list).addEventListener('click', (e) => {
+      const row = e.target.closest('[data-note]');
+      if (row) openNote(row.dataset.note);
+    });
+  }
+  $('#btn-note-new').addEventListener('click', () => openNote(null));
+  $('#btn-note-new-room').addEventListener('click', () => openNote(null));
+
+  // =========================================================================
+  // Napirend – meetingenként előre megírható, hívás közben kipipálható
+  // =========================================================================
+  let lobbyAgenda = [];
+
+  function agendaHtml(items) {
+    if (!items.length) return '<div class="empty-line">Még nincs napirendi pont.</div>';
+    return items
+      .map(
+        (i) => `<label class="check-item ${i.done ? 'done' : ''}">
+          <input type="checkbox" data-agenda="${i.id}" ${i.done ? 'checked' : ''} />
+          <span class="txt">${esc(i.text)}${i.done && i.doneBy ? `<span class="by">✓ ${esc(i.doneBy)}</span>` : ''}</span>
+          <button type="button" class="icon-btn del" data-agenda-del="${i.id}" title="Törlés">${icon('x')}</button>
+        </label>`
+      )
+      .join('');
+  }
+
+  function renderLobbyAgenda() {
+    $('#lobby-agenda').innerHTML = agendaHtml(lobbyAgenda);
+  }
+
+  function renderAgenda() {
+    const items = call.agenda || [];
+    const done = items.filter((i) => i.done).length;
+    $('#room-agenda').innerHTML = agendaHtml(items);
+    $('#agenda-count').textContent = items.length ? `${done}/${items.length}` : '';
+    $('#agenda-progress').style.width = `${items.length ? Math.round((done / items.length) * 100) : 0}%`;
+    $('#agenda-status').textContent = items.length
+      ? done === items.length
+        ? '🎉 Minden napirendi pont kész!'
+        : `${done} / ${items.length} pont kész`
+      : 'Írd fel, miről lesz szó – hívás közben kipipálhatjátok.';
+  }
+
+  async function agendaAction(meetingId, method, path, body = {}) {
+    try {
+      const res = await api(`/api/meetings/${meetingId}/agenda${path}`, { method, body: { ...body, inCall: call.id === meetingId } });
+      if (call.id === meetingId) {
+        call.agenda = res.agenda;
+        renderAgenda();
+      }
+      if (lobbyMeeting?.id === meetingId) {
+        lobbyAgenda = res.agenda;
+        renderLobbyAgenda();
+      }
+      if (res.msg) {
+        onChat(res.msg);
+        broadcast({ type: 'chat', msg: res.msg });
+      }
+      broadcast({ type: 'sync' });
+    } catch (err) {
+      toast(esc(err.message), { type: 'error' });
+    }
+  }
+
+  function bindAgenda(listSel, formSel, inputSel, meetingIdFn) {
+    $(listSel).addEventListener('click', (e) => {
+      const cb = e.target.closest('[data-agenda]');
+      if (cb) return agendaAction(meetingIdFn(), 'POST', `/${cb.dataset.agenda}`, { done: cb.checked });
+      const del = e.target.closest('[data-agenda-del]');
+      if (del) {
+        e.preventDefault();
+        agendaAction(meetingIdFn(), 'DELETE', `/${del.dataset.agendaDel}`);
+      }
+    });
+    $(formSel).addEventListener('submit', (e) => {
+      e.preventDefault();
+      const text = $(inputSel).value.trim();
+      if (!text) return;
+      $(inputSel).value = '';
+      agendaAction(meetingIdFn(), 'POST', '', { text });
+    });
+  }
+  bindAgenda('#lobby-agenda', '#agenda-form-lobby', '#agenda-input-lobby', () => lobbyMeeting.id);
+  bindAgenda('#room-agenda', '#agenda-form-room', '#agenda-input-room', () => call.id);
+
+  // =========================================================================
+  // Jegyzőkönyv – egy kattintással jegyzet a hívásról
+  // =========================================================================
+  $('#btn-minutes').addEventListener('click', (e) =>
+    busy(e.currentTarget, async () => {
+      const m = call.meeting;
+      const now = new Date();
+      const mins = Math.max(1, Math.round((Date.now() - call.startedAt) / 60000));
+      const people = [S.user, ...[...call.peers.values()].map((p) => p.user)].map((u) => `${u.name} (${u.role})`);
+      const check = (i, who) => `${i.done ? '[x]' : '[ ]'} ${i.text}${i.done && who ? ` – ${who}` : ''}`;
+      const chat = call.messages
+        .filter((x) => x.type !== 'system')
+        .slice(-150)
+        .map((x) => `${hm(new Date(x.ts))} ${x.user.name}: ${x.type === 'file' ? `📎 ${x.file.name}` : x.text}`);
+      const body = [
+        `Meeting: ${m.title}`,
+        `Cég: ${currentCompany().name}`,
+        `Dátum: ${fullDate.format(now)} ${hm(now)}`,
+        `Résztvevők: ${people.join(', ')}`,
+        `Időtartam eddig: ${mins} perc`,
+        '',
+        'NAPIREND',
+        ...((call.agenda || []).length ? call.agenda.map((i) => check(i, i.doneBy)) : ['– nem volt napirend –']),
+        '',
+        'CÉLOK',
+        ...(S.goals.length ? S.goals.map((g) => check(g, g.doneBy)) : ['– nincs kitűzött cél –']),
+        '',
+        'DÖNTÉSEK, TEENDŐK',
+        '- ',
+        '',
+        'CHAT',
+        ...(chat.length ? chat : ['– nem volt üzenet –']),
+      ].join('\n');
+      try {
+        editingNote = { id: null, companyId: S.companyId };
+        $('#note-title').value = `Jegyzőkönyv – ${m.title} (${monthFmt.format(now)} ${now.getDate()}.)`;
+        $('#note-body').value = body;
+        const res = await saveNote();
+        toast(`${icon('check')} Jegyzőkönyv elkészült – a Jegyzetek között megtalálod`);
+        openNote(res.id);
+      } catch (err) {
+        toast(esc(err.message), { type: 'error' });
+      }
+    })
+  );
 
   // =========================================================================
   // Zene – a Spotify hivatalos beágyazott lejátszója. Hívás közben a „Közös

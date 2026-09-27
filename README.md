@@ -49,6 +49,11 @@ Ezután nyisd meg: http://localhost:3000. Helyben nem kell se Redis, se Blob: az
 - **Élő jelzés:** látod, ki van online, és ki melyik hívásban ül. Ha a másik belép, értesítést kapsz.
 - **Hívás:** mikrofon (`M`), kamera (`V`), képernyőmegosztás (`S`), kiemelt nézet, beszélő kiemelése, reakciók.
 - **Chat és fájlok:** üzenetek és fájlok hívás közben (max 500 MB). Húzd az ablakra, illeszd be, vagy csatold a gemkapoccsal.
+- **Cégek:** a fejlécben váltható (pl. Tárgyaló, Velyric). Minden cégnek külön meetingjei, céljai és jegyzetei vannak. A **Velyric** a velyric.com arculatát kapja: logó, Geist betűtípus, pink–magenta színek, színátmenetes „pirula” gombok. Új céget a CEO hozhat létre, saját kiemelőszínnel vagy Velyric stílusban.
+- **Célok:** cégenként kitűzött, mindig látható célok a főoldalon és hívás közben a chat tetején. A chatből a 🎯 gombbal vagy `/cél …` paranccsal lehet újat felvenni, és kipipálhatók.
+- **Jegyzetek:** céges jegyzetek, amik a főoldalon és hívás közben (Jegyzet fül) is szerkeszthetők.
+- **Napirend (terv):** meetingenként előre megírható a meghirdetéskor vagy az előcsarnokban. Hívás közben a Terv fülön kipipálható, a pipálás mindenkinél azonnal frissül, és bekerül a chatbe is.
+- **Jegyzőkönyv:** hívás közben egy gombbal jegyzet készül a résztvevőkről, a napirendről, a célokról és a chatről.
 - **Zene (Spotify):** a lebegő lejátszóba bármilyen Spotify link beilleszthető (dal, album, lista, podcast), és van 3 beépített lista. Hívás közben a **Közös hallgatás** a másiknál is betölti, elindítja, megállítja és tekeri ugyanazt a számot. Mindenki a saját Spotify-jából hallgat. A Spotifyba belépve teljes számok szólnak, anélkül 30 mp-es részletek. A lejátszó oldalváltáskor sem áll le.
 
 ## Biztonság
