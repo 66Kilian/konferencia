@@ -41,6 +41,9 @@
       <symbol id="i-expand" viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></symbol>
       <symbol id="i-lock" viewBox="0 0 24 24"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></symbol>
       <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+      <symbol id="i-music" viewBox="0 0 24 24"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></symbol>
+      <symbol id="i-play" viewBox="0 0 24 24"><path d="M6 3l14 9-14 9z"/></symbol>
+      <symbol id="i-minus" viewBox="0 0 24 24"><path d="M5 12h14"/></symbol>
       <symbol id="i-shield" viewBox="0 0 24 24"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="M12 8v4"/><path d="M12 16h.01"/></symbol>
     </defs>
   </svg>
@@ -159,6 +162,7 @@
       <div class="topbar-right">
         <div class="clock" id="home-clock"></div>
         <div class="me-pill" id="me-pill"></div>
+        <button class="icon-btn" id="btn-music" title="Zene"><svg class="i"><use href="#i-music"/></svg></button>
         <button class="icon-btn" id="btn-logout-all" title="Minden eszköz kiléptetése"><svg class="i"><use href="#i-shield"/></svg></button>
         <button class="icon-btn" id="btn-logout" title="Kijelentkezés"><svg class="i"><use href="#i-logout"/></svg></button>
       </div>
@@ -307,6 +311,7 @@
         <button class="ctrl ctrl-danger" id="ctl-leave" title="Kilépés"><svg class="i"><use href="#i-leave"/></svg></button>
       </div>
       <div class="controls-right">
+        <button class="ctrl ctrl-sm" id="ctl-music" title="Zene"><svg class="i"><use href="#i-music"/></svg></button>
         <button class="ctrl ctrl-sm" id="ctl-people" title="Résztvevők"><svg class="i"><use href="#i-users"/></svg></button>
         <button class="ctrl ctrl-sm" id="ctl-files" title="Fájlok"><svg class="i"><use href="#i-file"/></svg></button>
         <button class="ctrl ctrl-sm" id="ctl-chat" title="Chat"><svg class="i"><use href="#i-chat"/></svg><span class="badge" id="chat-badge" hidden></span></button>
@@ -317,6 +322,26 @@
       <div><svg class="i"><use href="#i-download"/></svg><p>Engedd el a feltöltéshez</p></div>
     </div>
   </section>
+
+  <!-- ============================ ZENE ============================ -->
+  <aside class="music" id="music" hidden>
+    <div class="music-head">
+      <div class="music-title"><svg class="i"><use href="#i-music"/></svg><span>Zene</span></div>
+      <label class="music-share" id="music-share-wrap" title="Hívás közben a másiknál is ugyanaz szól" hidden>
+        <input type="checkbox" id="music-share" /><span>Közös hallgatás</span>
+      </label>
+      <button class="icon-btn" id="music-min" title="Kis méret"><svg class="i"><use href="#i-minus"/></svg></button>
+      <button class="icon-btn" id="music-close" title="Bezárás (leállítja a zenét)"><svg class="i"><use href="#i-x"/></svg></button>
+    </div>
+    <form class="music-form" id="music-form">
+      <input id="music-input" autocomplete="off" placeholder="Spotify link: dal, album vagy lista" />
+      <button class="icon-btn icon-btn-primary" type="submit" title="Lejátszás"><svg class="i"><use href="#i-play"/></svg></button>
+    </form>
+    <p class="form-error music-error" id="music-error"></p>
+    <div class="music-embed" id="music-embed"></div>
+    <div class="music-list" id="music-list"></div>
+    <p class="music-note">Ha a böngészőben be vagy lépve a Spotify-ba, teljes számok szólnak, különben 30 mp-es részletek. Hívás közben fülhallgató ajánlott.</p>
+  </aside>
 
   <!-- ============================ MEETING MEGHIRDETÉSE ============================ -->
   <dialog id="dlg-schedule" class="dialog">

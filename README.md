@@ -49,6 +49,7 @@ Ezután nyisd meg: http://localhost:3000. Helyben nem kell se Redis, se Blob: az
 - **Élő jelzés:** látod, ki van online, és ki melyik hívásban ül. Ha a másik belép, értesítést kapsz.
 - **Hívás:** mikrofon (`M`), kamera (`V`), képernyőmegosztás (`S`), kiemelt nézet, beszélő kiemelése, reakciók.
 - **Chat és fájlok:** üzenetek és fájlok hívás közben (max 500 MB). Húzd az ablakra, illeszd be, vagy csatold a gemkapoccsal.
+- **Zene (Spotify):** a lebegő lejátszóba bármilyen Spotify link beilleszthető (dal, album, lista, podcast), és van 3 beépített lista. Hívás közben a **Közös hallgatás** a másiknál is betölti, elindítja, megállítja és tekeri ugyanazt a számot. Mindenki a saját Spotify-jából hallgat. A Spotifyba belépve teljes számok szólnak, anélkül 30 mp-es részletek. A lejátszó oldalváltáskor sem áll le.
 
 ## Biztonság
 

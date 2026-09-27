@@ -396,6 +396,7 @@
     if (call.id) leaveCall(false);
     stopLocalMedia();
     clearTimeout(pollTimer);
+    closeMusic();
     S.user = null;
     showAuth();
   }
@@ -1042,6 +1043,7 @@
     $('#room-title').textContent = meeting.title;
     document.title = `● ${meeting.title} – Tárgyaló`;
     show('room');
+    paintMusicButtons();
 
     call.localTile = createTile('local', S.user, true);
     paintLocalTile();
@@ -1108,6 +1110,7 @@
     call.localTile = null;
     stage.innerHTML = '';
     setSide(false);
+    paintMusicButtons();
     poll();
     if (navigate) location.hash = '#/';
   }
@@ -1330,7 +1333,7 @@
     p.connInit = init;
     conn.on('open', () => {
       if (p.conn !== conn) return;
-      conn.send({ type: 'hello', user: S.user, state: localState() });
+      conn.send({ type: 'hello', user: S.user, state: localState(), music: musicSnapshot() });
     });
     conn.on('data', (d) => p.conn === conn && onData(p, d));
     conn.on('close', () => {
@@ -1405,6 +1408,7 @@
         $('.role', p.tile).textContent = p.user.role;
         $('.tile-avatar', p.tile).innerHTML = avatar(p.user);
         if (first) toast(`${avatar(p.user)}<span><b>${esc(p.user.name)}</b> csatlakozott</span>`);
+        if (first && d.music) onRemoteMusicHello(p, d.music);
       }
       paintPeer(p);
       renderPeople();
@@ -1415,6 +1419,8 @@
     } else if (d.type === 'reaction' && typeof d.emoji === 'string' && Date.now() - (p.lastReaction || 0) > 300) {
       p.lastReaction = Date.now();
       floatEmoji(p.tile, d.emoji.slice(0, 8));
+    } else if (d.type === 'music' && typeof d.uri === 'string') {
+      onRemoteMusic(p, d);
     } else if (d.type === 'bye') {
       removePeer(p.id, true);
     }
@@ -1825,6 +1831,301 @@
   });
 
   window.addEventListener('resize', () => call.id && layout());
+
+  // =========================================================================
+  // Zene – a Spotify hivatalos beágyazott lejátszója. Hívás közben a „Közös
+  // hallgatás” a másiknál is betölti, elindítja, megállítja és tekeri a számot.
+  // Mindenki a saját Spotify-jából hallgatja, a hívás hangján nem megy át.
+  // =========================================================================
+  const SPOTIFY_PRESETS = [
+    { uri: 'spotify:playlist:37i9dQZF1DWZeKCadgRdKQ', title: 'Deep Focus' },
+    { uri: 'spotify:playlist:37i9dQZF1DWWQRwui0ExPn', title: 'lofi beats' },
+    { uri: 'spotify:playlist:37i9dQZF1DX4sWSpwq3LiO', title: 'Peaceful Piano' },
+  ];
+  const SPOTIFY_TYPES = { track: 'Dal', album: 'Album', playlist: 'Lejátszási lista', episode: 'Podcast epizód', show: 'Podcast', artist: 'Előadó' };
+
+  const music = {
+    uri: null,
+    controller: null,
+    paused: true,
+    position: 0,
+    updatedAt: 0,
+    quietUntil: 0, // távoli parancs után ennyi ideig nem küldjük vissza a változást
+    shared: local.get('tg_music_shared', true),
+    recent: local.get('tg_music_recent', []),
+    meta: {},
+  };
+
+  // Csak valódi Spotify címet fogadunk el (link vagy spotify:típus:azonosító)
+  function parseSpotify(input) {
+    const text = String(input || '').trim();
+    let m = /^spotify:(track|album|playlist|episode|show|artist):([A-Za-z0-9]{22})$/.exec(text);
+    if (m) return `spotify:${m[1]}:${m[2]}`;
+    try {
+      const u = new URL(text);
+      if (u.protocol !== 'https:' || u.hostname !== 'open.spotify.com') return null;
+      m = /^\/(?:intl-[a-z-]+\/)?(?:embed\/)?(track|album|playlist|episode|show|artist)\/([A-Za-z0-9]{22})(?:\/|$)/.exec(u.pathname);
+      return m ? `spotify:${m[1]}:${m[2]}` : null;
+    } catch {
+      return null;
+    }
+  }
+  const spotifyUrl = (uri) => `https://open.spotify.com/${uri.split(':')[1]}/${uri.split(':')[2]}`;
+
+  // Saját vezérlő a Spotify beágyazott lejátszójához. A Spotify iFrame API
+  // szkriptje eval()-t használna, amit a CSP tilt, ezért csak az iframe-et
+  // töltjük be, és a lejátszó postMessage-csatornáján vezéreljük.
+  const SPOTIFY_ORIGIN = 'https://open.spotify.com';
+
+  function embedUrl(uri, startSec = 0) {
+    const [, type, id] = uri.split(':');
+    const url = new URL(`${SPOTIFY_ORIGIN}/embed/${type}/${id}`);
+    if (startSec >= 1) url.searchParams.set('t', String(Math.floor(startSec)));
+    url.searchParams.set('theme', '0');
+    url.searchParams.set('utm_source', 'iframe-api'); // ettől küld eseményeket a lejátszó
+    return url.href;
+  }
+
+  function createSpotifyController(container, uri) {
+    const iframe = document.createElement('iframe');
+    iframe.title = 'Spotify lejátszó';
+    iframe.width = '100%';
+    iframe.height = '152';
+    iframe.setAttribute('frameborder', '0');
+    iframe.setAttribute('allow', 'autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture');
+    let loading = true;
+    let queue = [];
+
+    const send = (msg) => {
+      if (loading) return queue.push(msg);
+      iframe.contentWindow?.postMessage(msg, SPOTIFY_ORIGIN);
+    };
+    const onMessage = (e) => {
+      if (e.source !== iframe.contentWindow || e.origin !== SPOTIFY_ORIGIN) return;
+      const type = e.data?.type;
+      if (type === 'ready') {
+        loading = false;
+        queue.splice(0).forEach((m) => setTimeout(() => send(m), 0));
+        send({ command: 'load_complete_ack' });
+      } else if (type === 'playback_update' || type === 'playback_started') {
+        loading = false;
+        onPlayback(e.data.payload, type);
+      }
+    };
+    window.addEventListener('message', onMessage);
+    iframe.src = embedUrl(uri);
+    container.replaceChildren(iframe);
+
+    return {
+      play: () => send({ command: 'play' }),
+      pause: () => send({ command: 'pause' }),
+      resume: () => send({ command: 'resume' }),
+      seek: (sec) => send({ command: 'seek', timestamp: sec }),
+      loadUri(next, startSec = 0) {
+        loading = true;
+        queue = [];
+        iframe.src = embedUrl(next, startSec);
+      },
+      destroy() {
+        window.removeEventListener('message', onMessage);
+        iframe.remove();
+      },
+    };
+  }
+
+  // Cím és borítókép a Spotify nyilvános oEmbed szolgáltatásából
+  async function fetchMeta(uri) {
+    if (music.meta[uri]) return music.meta[uri];
+    try {
+      const res = await fetch(`https://open.spotify.com/oembed?url=${encodeURIComponent(spotifyUrl(uri))}`);
+      const data = await res.json();
+      const meta = {
+        title: String(data.title || '').slice(0, 120),
+        thumb: /^https:\/\/[a-z0-9.-]+\.(scdn\.co|spotifycdn\.com)\//.test(data.thumbnail_url || '') ? data.thumbnail_url : '',
+      };
+      music.meta[uri] = meta;
+      return meta;
+    } catch {
+      return { title: '', thumb: '' };
+    }
+  }
+
+  function rememberRecent(uri) {
+    music.recent = [uri, ...music.recent.filter((u) => u !== uri)].slice(0, 8);
+    local.set('tg_music_recent', music.recent);
+  }
+
+  async function renderMusicList() {
+    const presets = SPOTIFY_PRESETS.map((p) => p.uri);
+    const uris = [...new Set([...music.recent, ...presets])].slice(0, 10);
+    const rows = await Promise.all(
+      uris.map(async (uri) => {
+        const preset = SPOTIFY_PRESETS.find((p) => p.uri === uri);
+        const meta = await fetchMeta(uri);
+        const title = meta.title || preset?.title || 'Spotify';
+        const kind = SPOTIFY_TYPES[uri.split(':')[1]] || '';
+        return `<button class="music-item ${uri === music.uri ? 'on' : ''}" data-uri="${esc(uri)}">
+          ${meta.thumb ? `<img src="${esc(meta.thumb)}" alt="" loading="lazy" />` : '<span class="ph"></span>'}
+          <span class="t">${esc(title)}<br /><span class="k">${esc(kind)}${preset && !music.recent.includes(uri) ? ' · ajánlott' : ''}</span></span>
+        </button>`;
+      })
+    );
+    $('#music-list').innerHTML = rows.join('');
+  }
+
+  function openMusic() {
+    $('#music').hidden = false;
+    paintMusicButtons();
+    renderMusicList();
+  }
+
+  function closeMusic() {
+    music.controller?.destroy();
+    music.controller = null;
+    music.uri = null;
+    music.paused = true;
+    $('#music-embed').replaceChildren();
+    $('#music').hidden = true;
+    paintMusicButtons();
+  }
+
+  function paintMusicButtons() {
+    const on = !$('#music').hidden;
+    $('#btn-music').classList.toggle('on', on);
+    $('#ctl-music').classList.toggle('active', on);
+    $('#music-share-wrap').hidden = !call.id;
+    $('#music-share').checked = music.shared;
+  }
+
+  function playMusic(uri, { remote = false, play = false, position = 0 } = {}) {
+    openMusic();
+    $('#music-error').textContent = '';
+    if (remote) music.quietUntil = Date.now() + 6000;
+    if (!music.controller) music.controller = createSpotifyController($('#music-embed'), uri);
+    else if (music.uri !== uri) music.controller.loadUri(uri);
+    music.uri = uri;
+    music.paused = true;
+    music.syncedPaused = true;
+    music.started = false;
+    music.track = null;
+    music.position = 0;
+    rememberRecent(uri);
+    renderMusicList();
+    if (play) {
+      // a parancsok sorba állnak, és a lejátszó betöltése után futnak le
+      music.controller.play();
+      if (position > 1500) music.controller.seek(position / 1000);
+    }
+    if (!remote) shareMusic({ action: 'load', uri });
+  }
+
+  const PLAYABLE = /^spotify:(track|episode):[A-Za-z0-9]{22}$/;
+
+  // Helyi lejátszás-változás → a hívásban lévőknek is elküldjük.
+  // syncedPaused: az utoljára egyeztetett állapot, így a távoli parancs nem pattan vissza.
+  function onPlayback(d, type) {
+    if (!d) return;
+    if (type === 'playback_started') {
+      music.started = true;
+      return;
+    }
+    const now = Date.now();
+    const expected = music.paused ? music.position : music.position + (now - music.updatedAt);
+    music.paused = !!d.isPaused;
+    music.position = Number(d.position) || 0;
+    music.updatedAt = now;
+    if (PLAYABLE.test(d.playingURI || '')) music.track = d.playingURI;
+    if (d.isBuffering) return;
+    if (now < music.quietUntil) {
+      music.syncedPaused = music.paused;
+      return;
+    }
+    const snapshot = { uri: music.uri, track: music.track, position: music.position };
+    if (music.paused !== music.syncedPaused) {
+      music.syncedPaused = music.paused;
+      shareMusic({ action: music.paused ? 'pause' : 'play', ...snapshot });
+    } else if (!music.paused && Math.abs(music.position - expected) > 4000) {
+      shareMusic({ action: 'seek', ...snapshot });
+    }
+  }
+
+  function shareMusic(payload) {
+    if (call.id && music.shared) broadcast({ type: 'music', ...payload });
+  }
+
+  function musicSnapshot() {
+    if (!music.uri) return null;
+    const position = music.paused ? music.position : music.position + (Date.now() - music.updatedAt);
+    return { uri: music.uri, track: music.track, paused: music.paused, position };
+  }
+
+  // A másik fél zenés parancsa
+  function onRemoteMusic(p, d) {
+    const uri = parseSpotify(d.uri);
+    if (!uri || !music.shared) return;
+    const track = PLAYABLE.test(d.track || '') ? d.track : null;
+    const position = Math.max(Number(d.position) || 0, 0);
+    if (d.action === 'load') {
+      toast(`${avatar(p.user)}<span><b>${esc(p.user.name)}</b> zenét választott – nyomd meg a lejátszást</span>`);
+      return playMusic(uri, { remote: true });
+    }
+    if (!['play', 'pause', 'seek'].includes(d.action)) return;
+    if (music.uri !== uri || !music.controller) {
+      playMusic(uri, { remote: true });
+      if (d.action === 'pause') return;
+    }
+    const c = music.controller;
+    music.quietUntil = Date.now() + 4000;
+    if (d.action === 'pause') {
+      music.syncedPaused = true;
+      return c.pause();
+    }
+    // lejátszási listánál is ugyanaz a szám szóljon
+    if (track && track !== music.track) {
+      c.loadUri(track);
+      music.track = track;
+      music.started = false;
+    }
+    if (d.action === 'play') {
+      music.syncedPaused = false;
+      if (music.started) c.resume();
+      else c.play();
+    }
+    if (d.action === 'seek' || Math.abs(position - music.position) > 2500) c.seek(position / 1000);
+  }
+
+  // Aki később lép be a hívásba, megkapja, mi szól éppen
+  function onRemoteMusicHello(p, snapshot) {
+    const uri = parseSpotify(snapshot?.uri);
+    if (!uri || !music.shared || music.uri) return;
+    toast(`${avatar(p.user)}<span><b>${esc(p.user.name)}</b> zenét hallgat – bekapcsoltam nálad is</span>`);
+    playMusic(uri, { remote: true });
+    if (!snapshot.paused) onRemoteMusic(p, { ...snapshot, action: 'play' });
+  }
+
+  $('#btn-music').addEventListener('click', () => ($('#music').hidden ? openMusic() : ($('#music').hidden = true, paintMusicButtons())));
+  $('#ctl-music').addEventListener('click', () => ($('#music').hidden ? openMusic() : ($('#music').hidden = true, paintMusicButtons())));
+  $('#music-close').addEventListener('click', closeMusic);
+  $('#music-min').addEventListener('click', () => $('#music').classList.toggle('mini'));
+  $('#music-share').addEventListener('change', (e) => {
+    music.shared = e.target.checked;
+    local.set('tg_music_shared', music.shared);
+    if (music.shared && music.uri) shareMusic({ action: 'load', uri: music.uri });
+  });
+  $('#music-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const uri = parseSpotify($('#music-input').value);
+    if (!uri) {
+      $('#music-error').textContent = 'Ez nem Spotify link. A Spotifyban: Megosztás → Link másolása.';
+      return;
+    }
+    $('#music-input').value = '';
+    playMusic(uri);
+  });
+  $('#music-list').addEventListener('click', (e) => {
+    const item = e.target.closest('.music-item');
+    if (item) playMusic(item.dataset.uri);
+  });
 
   // =========================================================================
   // Indulás
