@@ -50,12 +50,26 @@ Ezután nyisd meg: http://localhost:3000. Helyben nem kell se Redis, se Blob: az
 - **Hívás:** mikrofon (`M`), kamera (`V`), képernyőmegosztás (`S`), kiemelt nézet, beszélő kiemelése, reakciók.
 - **Chat és fájlok:** üzenetek és fájlok hívás közben (max 500 MB). Húzd az ablakra, illeszd be, vagy csatold a gemkapoccsal.
 
+## Biztonság
+
+- **Belépés:** a munkamenet HttpOnly, `SameSite=Strict`, `__Host-` sütiben van, így a böngészőben futó kód nem fér hozzá. A szerver csak a hash-ét tárolja.
+- **4 jegyű kód:** scrypt és egy titkos „bors” (`PIN_PEPPER`) védi, így az adatbázis kiszivárgása esetén sem törhető. Idegen eszközről 3 hiba után 15 perc zárolás, utána minden hibánál duplázódik, legfeljebb 24 óráig. A saját, már használt eszközöd külön számlálót kap, így a támadó nem tud kizárni. A sikertelen próbálkozásokról figyelmeztetést kapsz.
+- **Fióklista:** csak már használt eszközön látszik, idegen gépen a nevet is be kell írni.
+- **Spam ellen:** kérés-korlátok minden végponton, gombtiltás a kérés végéig, legfeljebb 64 KB-os kérések, csak JSON, és más oldalról indított kérés (CSRF) tiltva.
+- **Fájlok:** privát Blob tárolóban vannak. Csak belépve, egy 5 percig érvényes aláírt linkkel tölthetők le.
+- **Hívás:** csak az a résztvevő csatlakozhat, akit a szerver belépett felhasználóként igazol. A kép és a hang végponttól végpontig titkosítva megy (DTLS-SRTP).
+- **Fejlécek:** szigorú CSP, `X-Frame-Options: DENY`, HSTS, Referrer- és Permissions-Policy.
+- **Pajzs gomb** a főoldalon: minden eszköz kiléptetése és a megbízható eszközök törlése, például elveszett telefon esetén.
+
+A `PIN_PEPPER` értékét **soha ne változtasd meg**, különben egyik kód sem fog működni.
+
 ## Beállítások (környezeti változók)
 
 | Változó | Alapérték | Leírás |
 |---|---|---|
 | `ALLOW_REGISTRATION` | `true` | `false` = új fiók nem hozható létre |
 | `MAX_UPLOAD_MB` | `500` | legnagyobb feltölthető fájl |
+| `PIN_PEPPER` | – | titkos érték a kódok hash-éhez (Vercelen be van állítva, ne módosítsd) |
 
 A Redis és a Blob változóit (`KV_REST_API_*`, `BLOB_READ_WRITE_TOKEN`) a Vercel automatikusan beállítja, amikor bekötöd őket.
 
