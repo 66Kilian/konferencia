@@ -1669,7 +1669,8 @@
   // Vercel Blob: a fájl közvetlenül a tárhelyre megy, a szerver csak engedélyt ad
   async function uploadToBlob(file, progress) {
     const safe = file.name.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\w.-]+/g, '_') || 'fajl';
-    const blob = await VercelBlob.upload(`${call.id}/${safe}`, file, {
+    const method = S.config.blobMode === 'token' ? VercelBlob.upload : VercelBlob.uploadPresigned;
+    const blob = await method(`${call.id}/${safe}`, file, {
       access: 'public',
       handleUploadUrl: '/api/upload',
       clientPayload: S.token,
