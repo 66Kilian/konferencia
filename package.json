@@ -14,7 +14,8 @@
   },
   "dependencies": {
     "@upstash/redis": "^1.39.0",
-    "@vercel/blob": "^2.8.0"
+    "@vercel/blob": "^2.8.0",
+    "qrcode": "^1.5.4"
   },
   "devDependencies": {
     "esbuild": "^0.28.2",

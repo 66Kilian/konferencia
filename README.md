@@ -60,9 +60,18 @@ Ezután nyisd meg: http://localhost:3000. Helyben nem kell se Redis, se Blob: az
 - **Fájlok:** privát Blob tárolóban vannak. Csak belépve, egy 5 percig érvényes aláírt linkkel tölthetők le.
 - **Hívás:** csak az a résztvevő csatlakozhat, akit a szerver belépett felhasználóként igazol. A kép és a hang végponttól végpontig titkosítva megy (DTLS-SRTP).
 - **Fejlécek:** szigorú CSP, `X-Frame-Options: DENY`, HSTS, Referrer- és Permissions-Policy.
+- **Kétlépcsős azonosítás (kötelező):** a PIN után a hitelesítő app (Google/Microsoft Authenticator, jelszókezelő) 6 jegyű kódja is kell. Első belépéskor mindenkinek be kell állítania QR-kóddal, és kap 10 egyszer használható helyreállító kódot. A titkos kulcs titkosítva van tárolva, egy kód csak egyszer használható, és a hibás kódokra is vonatkozik a zárolás. Új telefonnál: főoldal → Biztonság → „Új telefon / hitelesítő app”.
 - **Pajzs gomb** a főoldalon: minden eszköz kiléptetése és a megbízható eszközök törlése, például elveszett telefon esetén.
 
 A `PIN_PEPPER` értékét **soha ne változtasd meg**, különben egyik kód sem fog működni.
+
+## Rangok
+
+- **Kilian mindig CEO, Krisztián mindig CTO** (`FIXED_ROLES`). Ezt senki nem változtathatja meg, és más nem kaphat CEO vagy CTO rangot.
+- **Mindenki más alapból Alkalmazott.**
+- **CEO:** bárkinek adhat rangot, és el is veheti. Új rangot hozhat létre, és törölheti azokat (a törölt rangúak Alkalmazottak lesznek).
+- **CTO:** egy Alkalmazottnak Programozó rangot adhat.
+- Kezelni a főoldal Csapat paneljén lehet.
 
 ## Beállítások (környezeti változók)
 
@@ -70,6 +79,7 @@ A `PIN_PEPPER` értékét **soha ne változtasd meg**, különben egyik kód sem
 |---|---|---|
 | `ALLOW_REGISTRATION` | `true` | `false` = új fiók nem hozható létre |
 | `MAX_UPLOAD_MB` | `500` | legnagyobb feltölthető fájl |
+| `FIXED_ROLES` | – | rögzített rangok, pl. `kilian:CEO,krisz:CTO` |
 | `PIN_PEPPER` | – | titkos érték a kódok hash-éhez (Vercelen be van állítva, ne módosítsd) |
 
 A Redis és a Blob változóit (`KV_REST_API_*`, `BLOB_READ_WRITE_TOKEN`) a Vercel automatikusan beállítja, amikor bekötöd őket.

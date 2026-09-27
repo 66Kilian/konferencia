@@ -115,7 +115,8 @@
       logoutLocal();
       throw new Error(data.error || 'Lépj be újra.');
     }
-    if (!res.ok) throw new Error(data.error || 'Hiba történt.');
+    if (res.status === 403 && data.code === 'mfa_setup' && S.user) startMfaSetup();
+    if (!res.ok) throw Object.assign(new Error(data.error || 'Hiba történt.'), { code: data.code });
     return data;
   }
 
@@ -149,9 +150,9 @@
   // =========================================================================
   // PIN beviteli mező (4 doboz)
   // =========================================================================
-  function createPin(container, onComplete) {
+  function createPin(container, onComplete, length = 4) {
     container.innerHTML = Array.from(
-      { length: 4 },
+      { length },
       () => '<input inputmode="numeric" pattern="[0-9]*" maxlength="1" autocomplete="off" />'
     ).join('');
     const inputs = $$('input', container);
@@ -163,7 +164,7 @@
     function check() {
       sync();
       const v = value();
-      if (v.length === 4 && !busy) {
+      if (v.length === length && !busy) {
         busy = true;
         Promise.resolve(onComplete(v)).finally(() => (busy = false));
       }
@@ -173,7 +174,7 @@
       input.addEventListener('input', () => {
         container.classList.remove('error');
         input.value = input.value.replace(/\D/g, '').slice(-1);
-        if (input.value && idx < 3) inputs[idx + 1].focus();
+        if (input.value && idx < length - 1) inputs[idx + 1].focus();
         check();
       });
       input.addEventListener('keydown', (e) => {
@@ -183,14 +184,14 @@
           sync();
           e.preventDefault();
         } else if (e.key === 'ArrowLeft' && idx > 0) inputs[idx - 1].focus();
-        else if (e.key === 'ArrowRight' && idx < 3) inputs[idx + 1].focus();
+        else if (e.key === 'ArrowRight' && idx < length - 1) inputs[idx + 1].focus();
       });
       input.addEventListener('paste', (e) => {
-        const digits = (e.clipboardData.getData('text') || '').replace(/\D/g, '').slice(0, 4);
+        const digits = (e.clipboardData.getData('text') || '').replace(/\D/g, '').slice(0, length);
         if (!digits) return;
         e.preventDefault();
         digits.split('').forEach((d, i) => (inputs[i].value = d));
-        inputs[Math.min(digits.length, 3)].focus();
+        inputs[Math.min(digits.length, length - 1)].focus();
         check();
       });
       input.addEventListener('focus', () => input.select());
@@ -220,7 +221,7 @@
   // =========================================================================
   // Belépés + regisztráció
   // =========================================================================
-  const reg = { name: '', role: 'CEO', pin: '' };
+  const reg = { name: '', pin: '' };
   let loginUser = null;
 
   function authStep(step) {
@@ -229,6 +230,8 @@
     if (step === 'login-pin') (pinLogin.clear(), pinLogin.focus());
     if (step === 'reg-name') setTimeout(() => $('#reg-name').focus(), 60);
     if (step === 'login-name') setTimeout(() => $('#login-name').focus(), 60);
+    if (step === 'login-totp') (pinTotp.clear(), pinTotp.focus());
+    if (step === 'mfa-setup') pinSetup.clear();
     if (step === 'reg-pin') (pinReg1.clear(), pinReg2.clear(), pinReg1.focus());
     if (step === 'reg-pin2') (pinReg2.clear(), pinReg2.focus());
   }
@@ -292,6 +295,11 @@
     try {
       const res = await api('/api/login', { method: 'POST', body: { name: loginUser.name, pin } });
       pinLogin.ok();
+      if (res.mfa === 'required') {
+        S.mfaTicket = res.ticket;
+        $('[data-step="login-totp"] .link-back').dataset.go = S.users.length ? 'pick' : 'login-name';
+        return setTimeout(() => authStep('login-totp'), 250);
+      }
       setTimeout(() => setSession(res), 250);
     } catch (err) {
       $('#login-error').textContent = err.message;
@@ -299,29 +307,121 @@
     }
   });
 
-  // Szerep kiválasztása
-  $('#reg-role').addEventListener('click', (e) => {
-    const btn = e.target.closest('button');
-    if (!btn) return;
-    $$('#reg-role button').forEach((b) => b.classList.toggle('on', b === btn));
-    const custom = btn.dataset.role === '';
-    $('#reg-role-custom').hidden = !custom;
-    if (custom) $('#reg-role-custom').focus();
-    reg.role = btn.dataset.role;
+  // --- Kétlépcsős azonosítás ------------------------------------------------
+  async function submitSecondFactor(code, onError) {
+    try {
+      const res = await api('/api/login/2fa', { method: 'POST', body: { ticket: S.mfaTicket, code } });
+      S.mfaTicket = null;
+      setSession(res);
+      if (res.usedRecovery) {
+        toast(`Helyreállító kóddal léptél be, ${res.mfa.recoveryLeft} maradt. Állíts be új hitelesítő appot a Biztonság panelen.`, { type: 'error', ms: 9000 });
+      }
+    } catch (err) {
+      $('#totp-error').textContent = err.message;
+      onError();
+      if (err.code === 'mfa_expired') setTimeout(() => authStep(S.users.length ? 'pick' : 'login-name'), 1500);
+    }
+  }
+
+  const pinTotp = createPin($('#pin-totp'), (code) => submitSecondFactor(code, () => pinTotp.error()), 6);
+  $('#pin-totp input').setAttribute('autocomplete', 'one-time-code');
+
+  $('#recovery-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const code = $('#recovery-code').value.trim();
+    if (!code) return;
+    busy($('#recovery-form button'), () => submitSecondFactor(code, () => ($('#recovery-code').value = '')));
   });
 
+  async function startMfaSetup() {
+    if (call.id) leaveCall(false);
+    clearTimeout(pollTimer);
+    show('auth');
+    authStep('mfa-setup');
+    $('#mfa-qr').removeAttribute('src');
+    try {
+      const res = await api('/api/2fa/setup', { method: 'POST' });
+      $('#mfa-qr').src = res.qr;
+      $('#mfa-secret').textContent = res.secret;
+      pinSetup.focus();
+    } catch (err) {
+      $('#mfa-setup-error').textContent = err.message;
+    }
+  }
+
+  const pinSetup = createPin(
+    $('#pin-setup'),
+    async (code) => {
+      try {
+        const res = await api('/api/2fa/enable', { method: 'POST', body: { code } });
+        pinSetup.ok();
+        S.mfa = res.mfa;
+        showRecoveryCodes(res.recoveryCodes);
+      } catch (err) {
+        $('#mfa-setup-error').textContent = err.message;
+        pinSetup.error();
+        if (err.code === 'mfa_setup_expired') setTimeout(startMfaSetup, 1200);
+      }
+    },
+    6
+  );
+
+  let recoveryText = '';
+  function showRecoveryCodes(codes) {
+    recoveryText =
+      `Tárgyaló – helyreállító kódok (${S.user.name})\n` +
+      `Létrehozva: ${new Date().toLocaleString('hu-HU')}\n` +
+      'Mindegyik kód csak egyszer használható.\n\n' +
+      codes.join('\n') +
+      '\n';
+    $('#mfa-codes').innerHTML = codes.map((c) => `<code>${esc(c)}</code>`).join('');
+    $('#mfa-codes-saved').checked = false;
+    $('#mfa-codes-done').disabled = true;
+    authStep('mfa-codes');
+  }
+
+  $('#mfa-codes-download').addEventListener('click', () => {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([recoveryText], { type: 'text/plain;charset=utf-8' }));
+    a.download = 'targyalo-helyreallito-kodok.txt';
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  });
+  $('#mfa-codes-saved').addEventListener('change', (e) => ($('#mfa-codes-done').disabled = !e.target.checked));
+  $('#mfa-codes-done').addEventListener('click', () => {
+    recoveryText = '';
+    $('#mfa-codes').innerHTML = '';
+    toast(`${icon('check')} A kétlépcsős azonosítás be van kapcsolva`);
+    route();
+    poll();
+  });
+  $('#mfa-setup-logout').addEventListener('click', async () => {
+    await api('/api/logout', { method: 'POST' }).catch(() => {});
+    logoutLocal();
+  });
+
+  function renderSecurityPanel() {
+    const m = S.mfa || {};
+    $('#mfa-status').textContent = m.enabled
+      ? `Kétlépcsős azonosítás bekapcsolva · ${m.recoveryLeft} helyreállító kód maradt`
+      : 'Kétlépcsős azonosítás kikapcsolva';
+  }
+
+  $('#btn-mfa-reset').addEventListener('click', () => {
+    if (!confirm('Új hitelesítő appot állítasz be. A régi app kódjai és a régi helyreállító kódok érvényüket vesztik, a többi eszközöd kilép. Folytatod?')) return;
+    startMfaSetup();
+  });
+
+  // Szerep kiválasztása
   $('#reg-name-form').addEventListener('submit', (e) => {
     e.preventDefault();
     const name = $('#reg-name').value.trim();
-    const role = reg.role || $('#reg-role-custom').value.trim();
     const err = $('#reg-name-error');
     if (name.length < 2) return (err.textContent = 'A név legalább 2 karakter legyen.');
-    if (!role) return (err.textContent = 'Add meg a szereped.');
     if (S.users.some((u) => u.name.toLowerCase() === name.toLowerCase())) {
       return (err.textContent = 'Ez a név már foglalt – válaszd ki a listából és lépj be.');
     }
     reg.name = name;
-    reg.finalRole = role;
     authStep('reg-pin');
   });
 
@@ -341,10 +441,10 @@
     try {
       const res = await api('/api/register', {
         method: 'POST',
-        body: { name: reg.name, role: reg.finalRole, pin: reg.pin, pin2: pin },
+        body: { name: reg.name, pin: reg.pin, pin2: pin },
       });
       pinReg2.ok();
-      toast(`${icon('check')} Fiók létrehozva. Üdv, ${esc(res.user.name)}!`);
+      toast(`${icon('check')} Fiók létrehozva. Most kapcsold be a kétlépcsős azonosítást.`);
       setTimeout(() => setSession(res), 250);
     } catch (e) {
       err.textContent = e.message;
@@ -352,9 +452,11 @@
     }
   });
 
-  function setSession({ user, alert }) {
+  function setSession({ user, alert, mfa }) {
     S.user = user;
+    S.mfa = mfa;
     local.set('tg_token', null); // régi, localStorage-os munkamenet eltakarítása
+    if (!mfa?.enabled) return startMfaSetup();
     route();
     poll();
     showSecurityAlert(alert);
@@ -440,6 +542,10 @@
     S.online = res.online;
     S.users = res.users;
     S.meetings = res.meetings;
+    S.roles = res.roles || [];
+    S.lockedUsers = res.lockedUsers || [];
+    const me = res.users.find((u) => u.id === S.user?.id);
+    if (me && me.role !== S.user.role) S.user = { ...S.user, role: me.role };
     if (res.alert) showSecurityAlert(res.alert);
     if (S.view === 'home') renderHome();
     if (S.view === 'lobby') renderLobbyLive();
@@ -486,6 +592,7 @@
     show('home');
     document.title = 'Tárgyaló';
     const u = S.user;
+    renderSecurityPanel();
     $('#me-pill').innerHTML = `${avatar(u)}<span class="name">${esc(u.name)}</span><span class="role-badge">${esc(u.role)}</span>`;
     renderHome();
     loadMeetings();
@@ -574,7 +681,27 @@
     renderTeam();
   }
 
+  // Rangkezelés: CEO bárkinek adhat / elvehet rangot, CTO Programozót adhat
+  function roleControl(u) {
+    const me = S.user;
+    if (u.id === me.id || S.lockedUsers?.includes(u.id)) {
+      return `<span class="role-badge lock">${S.lockedUsers?.includes(u.id) ? icon('lock') : ''}${esc(u.role)}</span>`;
+    }
+    if (me.role === 'CEO') {
+      const options = (S.roles || []).filter((r) => r !== 'CEO' && r !== 'CTO');
+      return `<select class="role-select" data-user="${u.id}" title="Rang módosítása">
+        ${options.map((r) => `<option value="${esc(r)}" ${r === u.role ? 'selected' : ''}>${esc(r)}</option>`).join('')}
+      </select>`;
+    }
+    if (me.role === 'CTO' && u.role === 'Alkalmazott') {
+      return `<button class="btn btn-ghost role-btn" data-user="${u.id}" data-role="Programozó" title="Programozó rang adása">+ Programozó</button>`;
+    }
+    return `<span class="role-badge">${esc(u.role)}</span>`;
+  }
+
   function renderTeam() {
+    // amíg épp egy rangválasztót használsz, nem rajzoljuk újra alóla
+    if ($('#team-list').contains(document.activeElement)) return;
     const liveTitle = (userId) => {
       for (const [roomId, users] of Object.entries(S.live)) {
         if (users.some((u) => u.id === userId)) return S.meetings.find((m) => m.id === roomId)?.title || 'meetingben';
@@ -592,11 +719,80 @@
             <div class="name">${esc(u.name)}${u.id === S.user.id ? ' <span class="muted">(te)</span>' : ''}</div>
             <div class="status ${on ? 'on' : ''}">${status}</div>
           </div>
-          <span class="role-badge">${esc(u.role)}</span>
+          ${roleControl(u)}
         </div>`;
       })
       .join('');
+    renderRolesAdmin();
   }
+
+  function renderRolesAdmin() {
+    const isCeo = S.user?.role === 'CEO';
+    $('#roles-admin').hidden = !isCeo;
+    if (!isCeo) return;
+    const builtin = ['CEO', 'CTO', 'Programozó', 'Alkalmazott'];
+    $('#roles-list').innerHTML = (S.roles || [])
+      .map((r) =>
+        builtin.includes(r)
+          ? `<span class="role-chip builtin">${esc(r)}</span>`
+          : `<span class="role-chip">${esc(r)}<button type="button" data-del-role="${esc(r)}" title="Rang törlése">${icon('x')}</button></span>`
+      )
+      .join('');
+  }
+
+  async function setRole(userId, role, el) {
+    const u = S.users.find((x) => x.id === userId);
+    await busy(el, async () => {
+      try {
+        await api(`/api/users/${userId}/role`, { method: 'POST', body: { role } });
+        toast(`${icon('check')} ${esc(u?.name || '')} rangja: ${esc(role)}`);
+      } catch (err) {
+        toast(esc(err.message), { type: 'error' });
+      }
+      el.blur();
+      await poll();
+    });
+  }
+
+  $('#team-list').addEventListener('change', (e) => {
+    const sel = e.target.closest('.role-select');
+    if (sel) setRole(sel.dataset.user, sel.value, sel);
+  });
+  $('#team-list').addEventListener('click', (e) => {
+    const btn = e.target.closest('.role-btn');
+    if (btn) setRole(btn.dataset.user, btn.dataset.role, btn);
+  });
+  $('#role-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const name = $('#role-name').value.trim();
+    if (!name) return;
+    busy($('#role-form button'), async () => {
+      try {
+        await api('/api/roles', { method: 'POST', body: { name } });
+        $('#role-name').value = '';
+        toast(`${icon('check')} Új rang: ${esc(name)}`);
+        await poll();
+      } catch (err) {
+        toast(esc(err.message), { type: 'error' });
+      }
+    });
+  });
+  $('#roles-list').addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-del-role]');
+    if (!btn) return;
+    const name = btn.dataset.delRole;
+    if (!confirm(`Törlöd a(z) „${name}” rangot? Akinek ez volt, Alkalmazott lesz.`)) return;
+    busy(btn, async () => {
+      try {
+        await api(`/api/roles/${encodeURIComponent(name)}`, { method: 'DELETE' });
+        toast(`„${esc(name)}” rang törölve`);
+        await poll();
+      } catch (err) {
+        toast(esc(err.message), { type: 'error' });
+      }
+    });
+  });
+
 
   $('#view-home').addEventListener('click', async (e) => {
     const btn = e.target.closest('[data-act]');

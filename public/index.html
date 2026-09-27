@@ -105,6 +105,57 @@
         <p class="form-error" id="login-error"></p>
       </div>
 
+      <!-- Belépés 2. lépés: hitelesítő app kódja -->
+      <div class="auth-step" data-step="login-totp">
+        <button class="link-back" data-go="pick"><svg class="i"><use href="#i-back"/></svg>Vissza</button>
+        <div class="steps"><i class="on"></i><i class="on"></i></div>
+        <h1>Kétlépcsős kód</h1>
+        <p class="muted">Nyisd meg a hitelesítő alkalmazást, és írd be a Tárgyaló 6 jegyű kódját.</p>
+        <div class="pin six" id="pin-totp"></div>
+        <p class="form-error" id="totp-error"></p>
+        <details class="recovery">
+          <summary>Nincs nálam a telefonom</summary>
+          <form id="recovery-form" class="stack">
+            <label class="field"><span>Helyreállító kód</span><input id="recovery-code" autocomplete="one-time-code" placeholder="xxxx-xxxx" maxlength="9" /></label>
+            <button class="btn btn-ghost btn-block" type="submit">Belépés helyreállító kóddal</button>
+          </form>
+        </details>
+      </div>
+
+      <!-- 2FA beállítása -->
+      <div class="auth-step" data-step="mfa-setup">
+        <div class="steps"><i class="on"></i><i></i></div>
+        <h1>Kétlépcsős azonosítás</h1>
+        <p class="muted">A belépéshez mostantól a kódod mellett a telefonodon lévő hitelesítő alkalmazás kódja is kell. Így akkor sem jut be senki, ha kitalálja a kódod.</p>
+        <ol class="setup-list">
+          <li>Telepíts egy hitelesítő appot: <b>Google Authenticator</b>, <b>Microsoft Authenticator</b> vagy a <b>jelszókezelőd</b>.</li>
+          <li>Az appban válaszd a <b>QR-kód beolvasását</b>, és olvasd be ezt:</li>
+        </ol>
+        <div class="qr-box">
+          <img id="mfa-qr" alt="QR-kód a hitelesítő alkalmazáshoz" width="200" height="200" />
+          <details class="recovery">
+            <summary>Nem tudom beolvasni</summary>
+            <p class="muted">Add hozzá kézzel ezzel a kulccsal (időalapú):</p>
+            <code class="secret" id="mfa-secret"></code>
+          </details>
+        </div>
+        <p class="muted">3. Írd be az appban megjelenő 6 jegyű kódot:</p>
+        <div class="pin six" id="pin-setup"></div>
+        <p class="form-error" id="mfa-setup-error"></p>
+        <button class="btn btn-ghost btn-block" id="mfa-setup-logout" type="button"><svg class="i"><use href="#i-logout"/></svg>Kijelentkezés</button>
+      </div>
+
+      <!-- Helyreállító kódok -->
+      <div class="auth-step" data-step="mfa-codes">
+        <div class="steps"><i class="on"></i><i class="on"></i></div>
+        <h1>Mentsd el ezeket a kódokat</h1>
+        <p class="muted">Ha elveszik a telefonod, ezekkel tudsz belépni. Mindegyik csak egyszer használható. Tedd biztos helyre (jelszókezelő, kinyomtatva) – többé nem mutatjuk meg őket.</p>
+        <div class="codes" id="mfa-codes"></div>
+        <button class="btn btn-ghost btn-block" id="mfa-codes-download" type="button"><svg class="i"><use href="#i-download"/></svg>Letöltés szövegfájlként</button>
+        <label class="check"><input type="checkbox" id="mfa-codes-saved" /> Elmentettem a kódokat</label>
+        <button class="btn btn-primary btn-block" id="mfa-codes-done" type="button" disabled>Tovább</button>
+      </div>
+
       <!-- Regisztráció 1: név és szerep -->
       <div class="auth-step" data-step="reg-name">
         <button class="link-back" data-go="pick"><svg class="i"><use href="#i-back"/></svg>Vissza</button>
@@ -115,16 +166,7 @@
             <span>Név</span>
             <input id="reg-name" autocomplete="off" maxlength="32" placeholder="pl. Kilian" required />
           </label>
-          <div class="field">
-            <span>Szereped</span>
-            <div class="segmented" id="reg-role">
-              <button type="button" data-role="CEO" class="on">CEO</button>
-              <button type="button" data-role="Programozó">Programozó</button>
-              <button type="button" data-role="SEO">SEO</button>
-              <button type="button" data-role="">Egyéb…</button>
-            </div>
-            <input id="reg-role-custom" maxlength="40" placeholder="Írd be a szereped" hidden />
-          </div>
+          <p class="muted">Új fiókként <b>Alkalmazott</b> rangot kapsz, ezt a CEO módosíthatja.</p>
           <p class="form-error" id="reg-name-error"></p>
           <button class="btn btn-primary btn-block" type="submit">Tovább</button>
         </form>
@@ -215,6 +257,19 @@
           <div class="panel">
             <h2 class="section-title">Csapat</h2>
             <div id="team-list" class="team-list"></div>
+            <div id="roles-admin" class="roles-admin" hidden>
+              <h3>Rangok</h3>
+              <div id="roles-list" class="roles-list"></div>
+              <form id="role-form" class="role-form">
+                <input id="role-name" maxlength="30" placeholder="Új rang neve" autocomplete="off" />
+                <button class="btn btn-sm btn-primary" type="submit"><svg class="i"><use href="#i-plus"/></svg></button>
+              </form>
+            </div>
+          </div>
+          <div class="panel" id="security-panel">
+            <h2 class="section-title">Biztonság</h2>
+            <p class="sec-line"><svg class="i"><use href="#i-shield"/></svg><span id="mfa-status"></span></p>
+            <button class="btn btn-ghost btn-sm btn-block" id="btn-mfa-reset" type="button">Új telefon / hitelesítő app</button>
           </div>
           <div class="panel tip">
             <h3>Tipp</h3>
