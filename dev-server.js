@@ -8,7 +8,12 @@ const handler = require('./lib/handler');
 
 const PORT = Number(process.env.PORT) || 3000;
 const PUBLIC = path.join(__dirname, 'public');
-const UPLOADS = path.join(__dirname, 'data', 'uploads');
+// Ugyanazok a biztonsági fejlécek, mint Vercelen (HSTS nélkül, mert helyben HTTP)
+const SECURITY_HEADERS = Object.fromEntries(
+  require('./vercel.json')
+    .headers[0].headers.filter((h) => h.key !== 'Strict-Transport-Security')
+    .map((h) => [h.key, h.value])
+);
 const TYPES = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
@@ -33,16 +38,8 @@ function serveFile(res, file, headers = {}) {
 http
   .createServer((req, res) => {
     const url = new URL(req.url, 'http://localhost');
+    for (const [k, v] of Object.entries(SECURITY_HEADERS)) res.setHeader(k, v);
     if (url.pathname.startsWith('/api/')) return handler(req, res);
-
-    if (url.pathname.startsWith('/uploads/')) {
-      const id = path.basename(url.pathname);
-      const name = url.searchParams.get('name') || id;
-      const disp = url.searchParams.get('download') ? 'attachment' : 'inline';
-      return serveFile(res, path.join(UPLOADS, id), {
-        'Content-Disposition': `${disp}; filename*=UTF-8''${encodeURIComponent(name)}`,
-      });
-    }
 
     const rel = path.normalize(decodeURIComponent(url.pathname)).replace(/^(\.\.[/\\])+/, '');
     let file = path.join(PUBLIC, rel);

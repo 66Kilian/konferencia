@@ -58,6 +58,17 @@
     }
   }
 
+  // Spam-kattintás ellen: amíg a művelet fut, a gomb le van tiltva
+  async function busy(btn, fn) {
+    if (!btn || btn.disabled) return;
+    btn.disabled = true;
+    try {
+      return await fn();
+    } finally {
+      setTimeout(() => (btn.disabled = false), 400);
+    }
+  }
+
   const roomUrl = (id) => `${location.origin}/#/room/${id}`;
 
   function toast(html, { type = '', onClick, ms = 3800 } = {}) {
@@ -82,7 +93,6 @@
   // Állapot + API
   // =========================================================================
   const S = {
-    token: local.get('tg_token', null),
     user: null,
     config: { allowRegistration: true, maxUploadMb: 1024 },
     users: [],
@@ -94,10 +104,14 @@
 
   async function api(path, { method = 'GET', body } = {}) {
     const headers = { 'Content-Type': 'application/json' };
-    if (S.token) headers.Authorization = `Bearer ${S.token}`;
-    const res = await fetch(path, { method, headers, body: body ? JSON.stringify(body) : undefined });
+    const res = await fetch(path, {
+      method,
+      headers,
+      credentials: 'same-origin',
+      body: body ? JSON.stringify(body) : undefined,
+    });
     const data = await res.json().catch(() => ({}));
-    if (res.status === 401 && S.token) {
+    if (res.status === 401 && S.user) {
       logoutLocal();
       throw new Error(data.error || 'Lépj be újra.');
     }
@@ -214,6 +228,7 @@
     $$('.form-error', $('#view-auth')).forEach((e) => (e.textContent = ''));
     if (step === 'login-pin') (pinLogin.clear(), pinLogin.focus());
     if (step === 'reg-name') setTimeout(() => $('#reg-name').focus(), 60);
+    if (step === 'login-name') setTimeout(() => $('#login-name').focus(), 60);
     if (step === 'reg-pin') (pinReg1.clear(), pinReg2.clear(), pinReg1.focus());
     if (step === 'reg-pin2') (pinReg2.clear(), pinReg2.focus());
   }
@@ -231,6 +246,11 @@
     } catch {
       S.users = [];
     }
+    // Idegen eszközön nem mutatjuk a fiókokat – a nevet is be kell írni
+    if (!S.users.length) {
+      $('[data-go="reg-name"]', $('[data-step="login-name"]')).hidden = !S.config.allowRegistration;
+      return authStep('login-name');
+    }
     const picker = $('#user-picker');
     picker.innerHTML = S.users.length
       ? S.users
@@ -244,14 +264,27 @@
           .join('')
       : '<div class="empty-note">Még nincs fiók. Hozd létre az elsőt!</div>';
     $('[data-go="reg-name"]', $('[data-step="pick"]')).hidden = !S.config.allowRegistration;
-    authStep(S.users.length || !S.config.allowRegistration ? 'pick' : 'reg-name');
+    authStep('pick');
   }
 
   $('#user-picker').addEventListener('click', (e) => {
     const btn = e.target.closest('.user-option');
     if (!btn) return;
     loginUser = S.users.find((u) => u.id === btn.dataset.id);
+    $('[data-step="login-pin"] .link-back').dataset.go = 'pick';
     $('#login-who').innerHTML = `${avatar(loginUser, 'avatar-lg')}<div><div class="name">${esc(loginUser.name)}</div><span class="role-badge">${esc(loginUser.role)}</span></div>`;
+    authStep('login-pin');
+  });
+
+  $('#btn-setup-reload').addEventListener('click', () => location.reload());
+
+  $('#login-name-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const name = $('#login-name').value.trim();
+    if (name.length < 2) return ($('#login-name-error').textContent = 'Írd be a neved.');
+    loginUser = { name, role: '', color: '#7c5cff' };
+    $('#login-who').innerHTML = `${avatar(loginUser, 'avatar-lg')}<div><div class="name">${esc(name)}</div></div>`;
+    $('[data-step="login-pin"] .link-back').dataset.go = 'login-name';
     authStep('login-pin');
   });
 
@@ -319,21 +352,51 @@
     }
   });
 
-  function setSession({ token, user }) {
-    S.token = token;
+  function setSession({ user, alert }) {
     S.user = user;
-    local.set('tg_token', token);
+    local.set('tg_token', null); // régi, localStorage-os munkamenet eltakarítása
     route();
     poll();
+    showSecurityAlert(alert);
   }
+
+  // Figyelmeztetés, ha valaki rossz kóddal próbált belépni a fiókodba
+  function showSecurityAlert(alert) {
+    const box = $('#sec-alert');
+    if (!alert?.count) return (box.hidden = true);
+    const when = new Date(alert.last);
+    $('#sec-alert-text').textContent =
+      `${alert.count} sikertelen belépési kísérlet volt a fiókodba` +
+      `${alert.unknownDevice ? ' ismeretlen eszközről' : ''} (utoljára: ${fullDate.format(when)} ${hm(when)}, IP: ${alert.ip}). ` +
+      'Ha nem te voltál, a pajzs gombbal kiléptethetsz minden eszközt.';
+    box.hidden = false;
+  }
+
+  $('#sec-alert-ok').addEventListener('click', (e) =>
+    busy(e.currentTarget, async () => {
+      await api('/api/alerts/ack', { method: 'POST' }).catch(() => {});
+      $('#sec-alert').hidden = true;
+    })
+  );
+
+  $('#btn-logout-all').addEventListener('click', (e) =>
+    busy(e.currentTarget, async () => {
+      if (!confirm('Minden eszközödet kiléptetem, és mindenhol újra be kell írnod a neved és a kódod. Folytatod?')) return;
+      try {
+        await api('/api/logout-all', { method: 'POST' });
+        toast(`${icon('check')} Minden eszköz kiléptetve`);
+      } catch (err) {
+        toast(esc(err.message), { type: 'error' });
+      }
+      logoutLocal();
+    })
+  );
 
   function logoutLocal() {
     if (call.id) leaveCall(false);
     stopLocalMedia();
     clearTimeout(pollTimer);
     S.user = null;
-    S.token = null;
-    local.set('tg_token', null);
     showAuth();
   }
 
@@ -376,6 +439,7 @@
     S.online = res.online;
     S.users = res.users;
     S.meetings = res.meetings;
+    if (res.alert) showSecurityAlert(res.alert);
     if (S.view === 'home') renderHome();
     if (S.view === 'lobby') renderLobbyLive();
     if (call.id) {
@@ -386,8 +450,8 @@
 
   document.addEventListener('visibilitychange', () => !document.hidden && S.user && poll());
   window.addEventListener('pagehide', () => {
-    if (!S.token) return;
-    const body = JSON.stringify({ token: S.token, clientId: S.clientId, gone: true });
+    if (!S.user) return;
+    const body = JSON.stringify({ clientId: S.clientId, gone: true });
     navigator.sendBeacon?.('/api/presence', new Blob([body], { type: 'application/json' }));
   });
 
@@ -546,17 +610,19 @@
     if (act === 'delete') {
       const m = S.meetings.find((x) => x.id === id);
       if (!confirm(`Biztosan törlöd: „${m.title}”?`)) return;
-      try {
-        await api(`/api/meetings/${id}`, { method: 'DELETE' });
-        toast('Meeting törölve');
-        loadMeetings();
-      } catch (err) {
-        toast(esc(err.message), { type: 'error' });
-      }
+      busy(btn, async () => {
+        try {
+          await api(`/api/meetings/${id}`, { method: 'DELETE' });
+          toast('Meeting törölve');
+          loadMeetings();
+        } catch (err) {
+          toast(esc(err.message), { type: 'error' });
+        }
+      });
     }
   });
 
-  $('#btn-instant').addEventListener('click', async () => {
+  $('#btn-instant').addEventListener('click', (e) => busy(e.currentTarget, async () => {
     try {
       const m = await api('/api/meetings', { method: 'POST', body: { instant: true, title: `${S.user.name} azonnali meetingje` } });
       await copyText(roomUrl(m.id));
@@ -565,7 +631,7 @@
     } catch (e) {
       toast(esc(e.message), { type: 'error' });
     }
-  });
+  }));
 
   // Meghirdetés dialógus
   const dlg = $('#dlg-schedule');
@@ -583,9 +649,12 @@
   dlg.addEventListener('click', (e) => {
     if (e.target.closest('[data-close]') || e.target === dlg) dlg.close();
   });
-  $('#schedule-form').addEventListener('submit', async (e) => {
+  $('#schedule-form').addEventListener('submit', (e) => {
     e.preventDefault();
-    const f = e.target;
+    busy($('#schedule-form button[type=submit]'), () => scheduleMeeting(e.target));
+  });
+
+  async function scheduleMeeting(f) {
     const startsAt = new Date(`${f.date.value}T${f.time.value}`);
     try {
       const m = await api('/api/meetings', {
@@ -604,7 +673,7 @@
     } catch (err) {
       $('#schedule-error').textContent = err.message;
     }
-  });
+  }
 
   // Óra és visszaszámlálók frissítése
   let lastMinute = -1;
@@ -894,6 +963,7 @@
     peerId: null,
     since: 0,
     msgIds: new Set(),
+    members: new Map(), // peerId -> a szerver által igazolt résztvevő
   };
   let lobbyMeeting = null;
 
@@ -1020,8 +1090,8 @@
       peer.on('disconnected', () => {
         if (call.peer === peer && !peer.destroyed) setTimeout(() => !peer.destroyed && peer.reconnect(), 1500);
       });
-      peer.on('connection', (conn) => call.peer === peer && adoptConn(conn, false));
-      peer.on('call', (mc) => call.peer === peer && adoptMedia(mc, false));
+      peer.on('connection', (conn) => call.peer === peer && admit(conn.peer).then((ok) => (ok ? adoptConn(conn, false) : conn.close())));
+      peer.on('call', (mc) => call.peer === peer && admit(mc.peer).then((ok) => (ok ? adoptMedia(mc, false) : mc.close())));
     });
   }
 
@@ -1199,7 +1269,20 @@
     return p;
   }
 
+  // Bejövő kapcsolatot csak attól fogadunk el, akit a szerver belépett
+  // résztvevőként ismer ebben a meetingben – idegen nem tud becsatlakozni.
+  async function admit(peerId) {
+    for (let i = 0; i < 4; i++) {
+      if (call.members.has(peerId)) return true;
+      await poll();
+      if (call.members.has(peerId)) return true;
+      await new Promise((r) => setTimeout(r, 800));
+    }
+    return false;
+  }
+
   function reconcileMembers(members) {
+    call.members = new Map(members.map((m) => [m.peerId, m]));
     const present = new Set(members.map((m) => m.peerId));
     for (const m of members) {
       const p = call.peers.get(m.peerId);
@@ -1234,7 +1317,8 @@
 
   function adoptConn(conn, outgoing) {
     if (!conn) return;
-    const p = ensurePeer(conn.peer, outgoing ? null : conn.metadata?.user, outgoing ? null : conn.metadata?.state);
+    const member = call.members.get(conn.peer);
+    const p = ensurePeer(conn.peer, member?.user, member?.state);
     const init = outgoing ? call.peerId : conn.peer;
     if (p.conn && p.conn !== conn) {
       if (!preferNew(p.conn, p.connInit, init)) return conn.close();
@@ -1258,7 +1342,8 @@
 
   function adoptMedia(mc, outgoing) {
     if (!mc) return;
-    const p = ensurePeer(mc.peer, outgoing ? null : mc.metadata?.user, outgoing ? null : mc.metadata?.state);
+    const member = call.members.get(mc.peer);
+    const p = ensurePeer(mc.peer, member?.user, member?.state);
     const init = outgoing ? call.peerId : mc.peer;
     if (p.media && p.media !== mc) {
       if (!preferNew(p.media, p.mediaInit, init)) return mc.close();
@@ -1310,26 +1395,35 @@
     if (d.type === 'hello' || d.type === 'state') {
       const startedScreen = d.state?.screen && !p.state.screen;
       p.state = { mic: !!d.state?.mic, cam: !!d.state?.cam, screen: !!d.state?.screen };
-      if (d.type === 'hello' && d.user) {
+      // a név és szerep mindig a szervertől jön, nem a másik féltől
+      const member = call.members.get(p.id);
+      if (d.type === 'hello' && member) {
         const first = !p.greeted;
-        p.user = d.user;
+        p.user = member.user;
         p.greeted = true;
-        $('.nm', p.tile).textContent = d.user.name;
-        $('.role', p.tile).textContent = d.user.role;
-        $('.tile-avatar', p.tile).innerHTML = avatar(d.user);
-        if (first) toast(`${avatar(d.user)}<span><b>${esc(d.user.name)}</b> csatlakozott</span>`);
+        $('.nm', p.tile).textContent = p.user.name;
+        $('.role', p.tile).textContent = p.user.role;
+        $('.tile-avatar', p.tile).innerHTML = avatar(p.user);
+        if (first) toast(`${avatar(p.user)}<span><b>${esc(p.user.name)}</b> csatlakozott</span>`);
       }
       paintPeer(p);
       renderPeople();
       layout();
       if (startedScreen) toast(`${avatar(p.user)}<span><b>${esc(p.user.name)}</b> megosztja a képernyőjét</span>`);
-    } else if (d.type === 'chat' && d.msg) {
-      onChat(d.msg);
-    } else if (d.type === 'reaction' && typeof d.emoji === 'string') {
+    } else if (d.type === 'chat' && validMsg(d.msg) && d.msg.user.id === p.user.id) {
+      onChat(d.msg); // csak a saját nevében küldhet üzenetet
+    } else if (d.type === 'reaction' && typeof d.emoji === 'string' && Date.now() - (p.lastReaction || 0) > 300) {
+      p.lastReaction = Date.now();
       floatEmoji(p.tile, d.emoji.slice(0, 8));
     } else if (d.type === 'bye') {
       removePeer(p.id, true);
     }
+  }
+
+  function validMsg(m) {
+    if (!m || typeof m !== 'object' || !/^[a-f0-9]{12}$/.test(m.id || '') || !m.user?.id) return false;
+    if (m.type === 'text') return typeof m.text === 'string' && m.text.length <= 4000;
+    return m.type === 'file' && /^[a-f0-9]{24}$/.test(m.file?.id || '') && typeof m.file.name === 'string';
   }
 
   function broadcast(msg) {
@@ -1394,6 +1488,10 @@
     const btn = e.target.closest('button');
     if (!btn) return;
     const emoji = btn.textContent;
+    const now = Date.now();
+    call.reactions = (call.reactions || []).filter((t) => now - t < 2000);
+    if (call.reactions.length >= 3) return;
+    call.reactions.push(now);
     broadcast({ type: 'reaction', emoji });
     floatEmoji(call.localTile, emoji);
     $('#react-pop').hidden = true;
@@ -1503,15 +1601,18 @@
     return `<div class="file-card">
       <div class="fi">${esc(fileExt(f.name))}</div>
       <div class="fmeta"><div class="fname" title="${esc(f.name)}">${esc(f.name)}</div><div class="fsize">${formatSize(f.size)}</div></div>
-      <a class="icon-btn" href="${esc(f.downloadUrl || f.url)}" download="${esc(f.name)}" target="_blank" rel="noopener" title="Letöltés">${icon('download')}</a>
+      <a class="icon-btn" href="/api/files/${esc(f.id)}?download=1" download="${esc(f.name)}" target="_blank" rel="noopener" title="Letöltés">${icon('download')}</a>
     </div>`;
   }
 
   function messageBodyHtml(msg) {
     if (msg.type !== 'file') return `<div class="bubble">${linkify(msg.text)}</div>`;
     const f = msg.file;
+    // a biztonsági frissítés előtti (nyilvános linkes) fájlok már nem érhetők el
+    if (!/^[a-f0-9]{24}$/.test(f?.id || '')) return `<div class="bubble">📎 ${esc(f?.name || 'fájl')} (már nem elérhető)</div>`;
     if (/^image\//.test(f.mime)) {
-      return `<img class="file-thumb" src="${esc(f.url)}" alt="${esc(f.name)}" loading="lazy" data-full="${esc(f.url)}" />${fileCardHtml(f)}`;
+      const src = `/api/files/${esc(f.id)}`;
+      return `<img class="file-thumb" src="${src}" alt="${esc(f.name)}" loading="lazy" data-full="${src}" />${fileCardHtml(f)}`;
     }
     return fileCardHtml(f);
   }
@@ -1587,7 +1688,7 @@
   $('#messages').addEventListener('load', (e) => e.target.matches('.file-thumb') && scrollMessages(), true);
 
   function renderFiles() {
-    const files = call.messages.filter((m) => m.type === 'file').reverse();
+    const files = call.messages.filter((m) => m.type === 'file' && /^[a-f0-9]{24}$/.test(m.file?.id || '')).reverse();
     $('#files-count').textContent = files.length ? `(${files.length})` : '';
     $('#files-list').innerHTML = files.length
       ? files
@@ -1657,7 +1758,7 @@
       const stored = S.config.storage === 'blob' ? await uploadToBlob(file, progress) : await uploadLocal(file, progress);
       await postMessage({
         type: 'file',
-        file: { name: file.name, size: file.size, mime: file.type, url: stored.url, downloadUrl: stored.downloadUrl },
+        file: { name: file.name, size: file.size, mime: file.type, ...stored },
       });
     } catch (err) {
       toast(esc(err.message || 'Feltöltési hiba.'), { type: 'error' });
@@ -1670,22 +1771,21 @@
   async function uploadToBlob(file, progress) {
     const safe = file.name.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\w.-]+/g, '_') || 'fajl';
     const method = S.config.blobMode === 'token' ? VercelBlob.upload : VercelBlob.uploadPresigned;
-    const blob = await method(`${call.id}/${safe}`, file, {
-      access: 'public',
+    const blob = await method(`${call.id}/${safe.slice(-150)}`, file, {
+      access: 'private',
       handleUploadUrl: '/api/upload',
-      clientPayload: S.token,
       contentType: file.type || undefined,
       multipart: file.size > 20 * 1024 * 1024,
       onUploadProgress: ({ percentage }) => progress(percentage),
     });
-    return { url: blob.url, downloadUrl: blob.downloadUrl };
+    return { pathname: blob.pathname };
   }
 
   function uploadLocal(file, progress) {
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
-      xhr.open('POST', `/api/local-upload?name=${encodeURIComponent(file.name)}`);
-      xhr.setRequestHeader('Authorization', `Bearer ${S.token}`);
+      xhr.open('POST', '/api/local-upload');
+      xhr.setRequestHeader('Content-Type', 'application/octet-stream');
       xhr.upload.onprogress = (e) => e.lengthComputable && progress((e.loaded / e.total) * 100);
       xhr.onload = () => {
         let data = {};
@@ -1693,7 +1793,7 @@
           data = JSON.parse(xhr.responseText);
         } catch {}
         if (xhr.status >= 300) reject(new Error(data.error || 'Feltöltési hiba.'));
-        else resolve(data);
+        else resolve({ localId: data.localId });
       };
       xhr.onerror = () => reject(new Error('Feltöltési hiba – ellenőrizd a kapcsolatot.'));
       xhr.send(file);
@@ -1733,10 +1833,8 @@
     try {
       S.config = await api('/api/config');
     } catch {}
-    if (!S.token) return showAuth();
     try {
-      const { user } = await api('/api/me');
-      setSession({ token: S.token, user });
+      setSession(await api('/api/me'));
     } catch {
       showAuth();
     }

@@ -41,6 +41,7 @@
       <symbol id="i-expand" viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></symbol>
       <symbol id="i-lock" viewBox="0 0 24 24"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></symbol>
       <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+      <symbol id="i-shield" viewBox="0 0 24 24"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="M12 8v4"/><path d="M12 16h.01"/></symbol>
     </defs>
   </svg>
 
@@ -66,7 +67,7 @@
           <li><b>Storage</b> → <b>Blob</b> → <b>Create</b> (Public) → kösd a projekthez. Ez kell a fájlmegosztáshoz.</li>
           <li><b>Deployments</b> → a legutóbbi → <b>Redeploy</b>.</li>
         </ol>
-        <button class="btn btn-primary btn-block" onclick="location.reload()">Újratöltés</button>
+        <button class="btn btn-primary btn-block" id="btn-setup-reload">Újratöltés</button>
       </div>
 
       <!-- Belépés: fiók kiválasztása -->
@@ -74,6 +75,21 @@
         <h1>Ki vagy?</h1>
         <p class="muted">Válaszd ki a fiókod, majd írd be a 4 jegyű kódod.</p>
         <div id="user-picker" class="user-picker"></div>
+        <button class="btn btn-ghost btn-block" data-go="reg-name"><svg class="i"><use href="#i-plus"/></svg>Új fiók létrehozása</button>
+      </div>
+
+      <!-- Belépés idegen eszközön: a nevet is be kell írni -->
+      <div class="auth-step" data-step="login-name">
+        <h1>Belépés</h1>
+        <p class="muted">Ezen az eszközön még nem léptél be. Írd be a neved, utána a kódod.</p>
+        <form id="login-name-form" class="stack">
+          <label class="field">
+            <span>Név</span>
+            <input id="login-name" autocomplete="username" maxlength="32" required />
+          </label>
+          <p class="form-error" id="login-name-error"></p>
+          <button class="btn btn-primary btn-block" type="submit">Tovább</button>
+        </form>
         <button class="btn btn-ghost btn-block" data-go="reg-name"><svg class="i"><use href="#i-plus"/></svg>Új fiók létrehozása</button>
       </div>
 
@@ -143,11 +159,17 @@
       <div class="topbar-right">
         <div class="clock" id="home-clock"></div>
         <div class="me-pill" id="me-pill"></div>
+        <button class="icon-btn" id="btn-logout-all" title="Minden eszköz kiléptetése"><svg class="i"><use href="#i-shield"/></svg></button>
         <button class="icon-btn" id="btn-logout" title="Kijelentkezés"><svg class="i"><use href="#i-logout"/></svg></button>
       </div>
     </header>
 
     <main class="home-main">
+      <div class="sec-alert" id="sec-alert" hidden>
+        <svg class="i"><use href="#i-shield"/></svg>
+        <p id="sec-alert-text"></p>
+        <button class="btn btn-sm btn-ghost" id="sec-alert-ok">Rendben</button>
+      </div>
       <div class="home-hero">
         <p class="eyebrow" id="home-date"></p>
         <h1 id="home-greeting"></h1>
