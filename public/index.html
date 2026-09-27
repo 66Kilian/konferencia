@@ -57,6 +57,18 @@
         </div>
       </div>
 
+      <!-- Vercelen még nincs adatbázis bekötve -->
+      <div class="auth-step" data-step="setup">
+        <h1>Még egy lépés</h1>
+        <p class="muted">Az oldal fut, de még nincs hova menteni a fiókokat. A Vercel projektben:</p>
+        <ol class="setup-list">
+          <li><b>Storage</b> fül → <b>Create Database</b> → <b>Upstash for Redis</b> (Free) → kösd a projekthez.</li>
+          <li><b>Storage</b> → <b>Blob</b> → <b>Create</b> (Public) → kösd a projekthez. Ez kell a fájlmegosztáshoz.</li>
+          <li><b>Deployments</b> → a legutóbbi → <b>Redeploy</b>.</li>
+        </ol>
+        <button class="btn btn-primary btn-block" onclick="location.reload()">Újratöltés</button>
+      </div>
+
       <!-- Belépés: fiók kiválasztása -->
       <div class="auth-step" data-step="pick">
         <h1>Ki vagy?</h1>
@@ -317,7 +329,8 @@
 
   <div class="toasts" id="toasts"></div>
 
-  <script src="/socket.io/socket.io.js"></script>
+  <script src="/vendor/peerjs.min.js"></script>
+  <script src="/vendor/blob-client.js"></script>
   <script src="/app.js"></script>
 </body>
 </html>

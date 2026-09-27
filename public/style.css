@@ -256,6 +256,9 @@ body.in-room .bg-aura { display: none; }
 .auth-step p.muted { margin: -6px 0 6px; }
 @keyframes rise { from { opacity: 0; transform: translateY(8px); } }
 
+.setup-list { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 10px; color: var(--text-2); font-size: 14px; }
+.setup-list b { color: var(--text); }
+
 .auth-foot { display: flex; align-items: center; gap: 6px; color: var(--text-3); font-size: 12px; margin: 0; }
 .auth-foot .i { width: 14px; height: 14px; }
 

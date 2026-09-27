@@ -1,63 +1,67 @@
 # Tárgyaló – privát videókonferencia
 
-Kilian (CEO) és Krisztián (programozó) saját meetingterme.
+Kilian (CEO) és Krisztián (programozó) saját meetingterme. Teljesen ingyen fut Vercelen.
 
-## Indítás
+## Hogyan működik
+
+| Rész | Hol fut | Ingyenes keret |
+|---|---|---|
+| Oldal + API (`public/`, `api/`) | Vercel (Hobby) | bőven elég |
+| Fiókok, meetingek, chat | Upstash Redis (Vercel Storage) | 500 ezer parancs/hó |
+| Feltöltött fájlok | Vercel Blob | 1 GB |
+| A két gép összekötése | PeerJS ingyenes jelzőszerver (0.peerjs.com) + TURN | – |
+
+A kép, a hang, a chat-értesítések és a reakciók közvetlenül a két gép között mennek (WebRTC). A szerver csak a belépést, a meetingeket, a chat előzményeket és a jelenlétet kezeli.
+
+## Vercel beállítás (egyszer)
+
+1. A projekt a GitHub repóból települ. Ha a projekt beállításainál (Settings → Build & Deployment) korábban kézzel átírtál valamit, állítsd vissza: Framework Preset: **Other**, a Build és az Output mező üres / alapértelmezett.
+2. **Storage** → **Create Database** → **Upstash for Redis** → Free csomag → **Connect** a projekthez.
+3. **Storage** → **Blob** → **Create** → hozzáférés: **Public** → **Connect** a projekthez.
+4. **Deployments** → a legutóbbi → **Redeploy**.
+
+Ha a 2. lépés kimarad, az oldal kiírja, hogy mit kell még bekötni.
+
+Ajánlott: ha mindketten regisztráltatok, a **Settings → Environment Variables** alatt vedd fel az `ALLOW_REGISTRATION` = `false` változót (utána Redeploy). Így idegen nem tud fiókot nyitni.
+
+### Saját domain (pl. konferencia.pureshine.hu)
+
+1. Vercel → projekt → **Settings → Domains** → add hozzá a `konferencia.pureshine.hu` domaint. A Vercel kiír egy **CNAME** értéket.
+2. A domain DNS-szolgáltatójánál (pureshine.hu → domdom.net) vegyél fel egy rekordot:
+   - Típus: **CNAME**
+   - Név: **konferencia**
+   - Érték: amit a Vercel kiírt (pl. `valami.vercel-dns-017.com`)
+3. Pár perc – néhány óra, és mindenhol elérhető lesz, telefonon is.
+
+## Helyi futtatás
 
 ```bash
-npm install     # csak első alkalommal
+npm install
 npm start
 ```
 
-Ezután nyisd meg a böngészőben: http://localhost:3000
-
-## Hogyan éri el Krisztián?
-
-A kamera és a mikrofon a böngészőben csak **HTTPS-en** (vagy localhoston) működik, ezért kívülről egy HTTPS-alagúton keresztül érdemes megosztani:
-
-```bash
-brew install cloudflared                        # egyszer
-cloudflared tunnel --url http://localhost:3000
-```
-
-A parancs kiír egy `https://valami.trycloudflare.com` címet. Ezt küldd el Krisztiánnak. A cím minden indításkor új lesz, az adatok viszont megmaradnak.
-
-Ha ugyanazon a wifin vagytok, ez is megy, de ugyanúgy HTTPS kell hozzá. Ezért egyszerűbb mindig az alagutat használni.
+Ezután nyisd meg: http://localhost:3000. Helyben nem kell se Redis, se Blob: az adatok a `data/` mappába kerülnek.
 
 ## Funkciók
 
-- **Regisztráció:** név, szerep (CEO / Programozó / SEO / egyéb), 4 jegyű kód, majd a kód megismétlése. Minden fiókhoz saját kód tartozik, és csak a hash-ük kerül mentésre. 5 rossz próbálkozás után a fiók 5 percre zárolódik.
-- **Belépés:** kattints a nevedre, és írd be a kódod. A böngésző megjegyzi a munkamenetet.
-- **Meetingek:** azonnali indítás vagy meghirdetés címmel, napirenddel, időponttal és hosszal. A meghívó link automatikusan a vágólapra kerül.
-- **Élő jelzés:** a főoldalon látod, ki van online, és ki melyik hívásban ül. Ha a másik belép egy meetingbe, értesítést kapsz.
-- **Hívás:** HD videó és hang, mikrofon némítása (`M`), kamera ki/be (`V`), képernyőmegosztás (`S`). Megosztás közben a képernyő kiemelt nézetbe kerül. A beszélő csempéje zölden világít.
-- **Chat és fájlok:** üzenetek és fájlfeltöltés hívás közben, legfeljebb 1 GB-ig. Fájlt csatolhatsz a gemkapoccsal, ráhúzhatod az ablakra, vagy beillesztheted. A képekből előnézet készül, és minden fájl letölthető a „Fájlok” fülön.
-- **Reakciók:** 👍 ❤️ 😂 🎉 👏 🔥 🤔
-- **Eszközválasztás:** az előcsarnokban kiválaszthatod a mikrofont és a kamerát, és beállíthatod, hogy némítva vagy kamera nélkül lépj be.
-
-## Adatok
-
-Minden a `data/` mappában van:
-
-| Fájl | Tartalom |
-|---|---|
-| `users.json` | fiókok (a kódok hash-elve) |
-| `meetings.json` | meetingek |
-| `messages.json` | chat előzmények |
-| `files.json` + `uploads/` | feltöltött fájlok |
-| `sessions.json` | bejelentkezések |
-
-Ha mindent törölni akarsz, állítsd le a szervert, és töröld a `data/` mappát.
+- **Regisztráció:** név, szerep, 4 jegyű kód, majd a kód megismétlése. Csak a kód hash-e kerül mentésre. 5 rossz próbálkozás után 5 perc zárolás.
+- **Meetingek:** azonnali indítás vagy meghirdetés címmel, napirenddel, időponttal és hosszal. A meghívó link a vágólapra kerül.
+- **Élő jelzés:** látod, ki van online, és ki melyik hívásban ül. Ha a másik belép, értesítést kapsz.
+- **Hívás:** mikrofon (`M`), kamera (`V`), képernyőmegosztás (`S`), kiemelt nézet, beszélő kiemelése, reakciók.
+- **Chat és fájlok:** üzenetek és fájlok hívás közben (max 500 MB). Húzd az ablakra, illeszd be, vagy csatold a gemkapoccsal.
 
 ## Beállítások (környezeti változók)
 
 | Változó | Alapérték | Leírás |
 |---|---|---|
-| `PORT` | `3000` | port |
-| `ALLOW_REGISTRATION` | `true` | Állítsd `false`-ra, miután mindketten regisztráltatok, így idegen nem tud fiókot nyitni. |
-| `MAX_UPLOAD_MB` | `1024` | legnagyobb feltölthető fájlméret |
-| `TURN_URL`, `TURN_USER`, `TURN_PASS` | – | TURN szerver, ha valamelyik hálózat blokkolja a közvetlen kapcsolatot |
+| `ALLOW_REGISTRATION` | `true` | `false` = új fiók nem hozható létre |
+| `MAX_UPLOAD_MB` | `500` | legnagyobb feltölthető fájl |
 
-Példa: `ALLOW_REGISTRATION=false npm start`
+A Redis és a Blob változóit (`KV_REST_API_*`, `BLOB_READ_WRITE_TOKEN`) a Vercel automatikusan beállítja, amikor bekötöd őket.
 
-A videó közvetlenül a két gép között megy (WebRTC), a szerver csak összeköti őket. Ritkán előfordul, hogy egy szigorú céges vagy mobilhálózat ezt nem engedi, és a csempén a „Kapcsolat sikertelen” felirat jelenik meg. Ilyenkor kell egy TURN szerver, például a metered.ca ingyenes csomagja. Az adatait a fenti változókba írd be.
+## Fejlesztőknek
+
+- `lib/handler.js` – az összes API végpont (Vercelen `api/index.js`, helyben `dev-server.js` hívja)
+- `lib/db.js` – Upstash Redis, helyben JSON fájl
+- `public/app.js` – a teljes kliens
+- `npm run vendor` – újraépíti a `public/vendor/` böngészős könyvtárakat (PeerJS, Vercel Blob feltöltő)

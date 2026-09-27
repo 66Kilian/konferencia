@@ -84,12 +84,12 @@
   const S = {
     token: local.get('tg_token', null),
     user: null,
-    socket: null,
     config: { allowRegistration: true, maxUploadMb: 1024 },
     users: [],
     meetings: [],
     live: {},
     online: [],
+    clientId: (crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`).replace(/[^a-z0-9-]/gi, ''),
   };
 
   async function api(path, { method = 'GET', body } = {}) {
@@ -104,9 +104,6 @@
     if (!res.ok) throw new Error(data.error || 'Hiba történt.');
     return data;
   }
-
-  const fileUrl = (id, inline) =>
-    `/api/files/${id}?token=${encodeURIComponent(S.token)}${inline ? '&inline=1' : ''}`;
 
   // =========================================================================
   // Nézetek + útválasztás
@@ -228,6 +225,7 @@
 
   async function showAuth() {
     show('auth');
+    if (S.config.db === 'missing') return authStep('setup');
     try {
       S.users = await api('/api/users');
     } catch {
@@ -325,16 +323,14 @@
     S.token = token;
     S.user = user;
     local.set('tg_token', token);
-    connectSocket();
-    api('/api/users').then((u) => (S.users = u)).catch(() => {});
     route();
+    poll();
   }
 
   function logoutLocal() {
     if (call.id) leaveCall(false);
     stopLocalMedia();
-    S.socket?.disconnect();
-    S.socket = null;
+    clearTimeout(pollTimer);
     S.user = null;
     S.token = null;
     local.set('tg_token', null);
@@ -349,49 +345,51 @@
   });
 
   // =========================================================================
-  // Socket
+  // Jelenlét: pár másodpercenként bejelentkezünk a szerverre, és visszakapjuk,
+  // ki van online, ki melyik hívásban ül, és a meetingek listáját.
   // =========================================================================
-  function connectSocket() {
-    S.socket?.disconnect();
-    const socket = io({ auth: { token: S.token } });
-    S.socket = socket;
-    let connectedOnce = false;
+  let pollTimer = null;
+  let polling = false;
 
-    socket.on('connect', () => {
-      if (connectedOnce && call.id) rejoinCall();
-      connectedOnce = true;
-    });
-    socket.on('connect_error', (err) => {
-      if (err.message === 'unauthorized') logoutLocal();
-    });
-
-    socket.on('rooms', (live) => {
-      notifyNewLive(S.live, live);
-      S.live = live;
-      if (S.view === 'home') renderHome();
-      if (S.view === 'lobby') renderLobbyLive();
-    });
-    socket.on('presence', (ids) => {
-      S.online = ids;
-      if (ids.some((id) => !S.users.find((u) => u.id === id))) {
-        api('/api/users').then((u) => {
-          S.users = u;
-          if (S.view === 'home') renderTeam();
-        });
-      }
-      if (S.view === 'home') renderTeam();
-    });
-    socket.on('meetings-changed', () => {
-      if (S.view === 'home') loadMeetings();
-    });
-
-    socket.on('peer-joined', onPeerJoined);
-    socket.on('peer-left', ({ id }) => removePeer(id, true));
-    socket.on('peer-state', onPeerState);
-    socket.on('signal', onSignal);
-    socket.on('chat', onChat);
-    socket.on('reaction', ({ id, emoji }) => floatEmoji(call.peers.get(id)?.tile, emoji));
+  async function poll() {
+    clearTimeout(pollTimer);
+    if (!S.user) return;
+    if (polling) return (pollTimer = setTimeout(poll, 500));
+    polling = true;
+    try {
+      const res = await api('/api/presence', {
+        method: 'POST',
+        body: { clientId: S.clientId, roomId: call.id, peerId: call.peerId, since: call.since, state: localState() },
+      });
+      applyPresence(res);
+    } catch {
+      /* hálózati hiba – a következő kör újrapróbálja */
+    } finally {
+      polling = false;
+    }
+    if (S.user) pollTimer = setTimeout(poll, call.id ? 10000 : document.hidden ? 30000 : 8000);
   }
+
+  function applyPresence(res) {
+    notifyNewLive(S.live, res.live);
+    S.live = res.live;
+    S.online = res.online;
+    S.users = res.users;
+    S.meetings = res.meetings;
+    if (S.view === 'home') renderHome();
+    if (S.view === 'lobby') renderLobbyLive();
+    if (call.id) {
+      reconcileMembers(res.members);
+      if (res.msgCount > call.messages.length) syncMessages();
+    }
+  }
+
+  document.addEventListener('visibilitychange', () => !document.hidden && S.user && poll());
+  window.addEventListener('pagehide', () => {
+    if (!S.token) return;
+    const body = JSON.stringify({ token: S.token, clientId: S.clientId, gone: true });
+    navigator.sendBeacon?.('/api/presence', new Blob([body], { type: 'application/json' }));
+  });
 
   function notifyNewLive(prev, next) {
     for (const [roomId, users] of Object.entries(next)) {
@@ -428,14 +426,7 @@
     loadMeetings();
   }
 
-  async function loadMeetings() {
-    try {
-      S.meetings = await api('/api/meetings');
-      renderHome();
-    } catch (e) {
-      toast(esc(e.message), { type: 'error' });
-    }
-  }
+  const loadMeetings = () => poll();
 
   const monthFmt = new Intl.DateTimeFormat('hu-HU', { month: 'short' });
   const longDate = new Intl.DateTimeFormat('hu-HU', { weekday: 'long', month: 'long', day: 'numeric' });
@@ -558,6 +549,7 @@
       try {
         await api(`/api/meetings/${id}`, { method: 'DELETE' });
         toast('Meeting törölve');
+        loadMeetings();
       } catch (err) {
         toast(esc(err.message), { type: 'error' });
       }
@@ -898,6 +890,10 @@
     tab: 'chat',
     sideOpen: false,
     lastGroup: null,
+    peer: null, // PeerJS kapcsolat a jelzőszerverhez
+    peerId: null,
+    since: 0,
+    msgIds: new Set(),
   };
   let lobbyMeeting = null;
 
@@ -965,8 +961,9 @@
     audioCtx();
     call.id = meeting.id;
     call.meeting = meeting;
-    call.startedAt = Date.now();
+    call.startedAt = call.since = Date.now();
     call.messages = [];
+    call.msgIds = new Set();
     call.unread = 0;
     call.pinned = null;
     call.lastGroup = null;
@@ -979,64 +976,103 @@
     call.localTile = createTile('local', S.user, true);
     paintLocalTile();
     paintControls();
-    await emitJoin();
+    setSide(window.innerWidth > 1200, 'chat');
 
     try {
-      const history = await api(`/api/rooms/${meeting.id}/messages`);
-      call.messages = [];
-      $('#messages').innerHTML = '';
-      call.lastGroup = null;
-      history.forEach((m) => addMessage(m, false));
-      renderMessagesEmpty();
-      renderFiles();
-    } catch {}
-    setSide(window.innerWidth > 1200, 'chat');
+      await openPeer(meeting.id);
+    } catch {
+      toast('Nem sikerült elérni a hívásszervert. Ellenőrizd a netet, és próbáld újra.', { type: 'error', ms: 7000 });
+      return leaveCall();
+    }
+    if (call.id !== meeting.id) return;
+    call.joining = true; // az első körben mi hívunk mindenkit, aki már bent van
+    await poll();
+    call.joining = false;
+    await syncMessages();
+    renderMessagesEmpty();
   }
 
-  function emitJoin() {
-    return new Promise((resolve) => {
-      S.socket.emit('join-room', { roomId: call.id, state: localState() }, (res) => {
-        if (res.error) {
-          toast(esc(res.error), { type: 'error' });
-          leaveCall();
-          return resolve();
-        }
-        call.iceServers = res.iceServers;
-        for (const p of res.peers) {
-          const peer = addPeer(p);
-          startOffer(peer);
-        }
-        renderPeople();
-        layout();
+  // Kapcsolódás a PeerJS ingyenes jelzőszerveréhez. Ez csak a két böngésző
+  // összekötéséhez kell, maga a kép, hang és chat közvetlenül megy.
+  function openPeer(roomId) {
+    return new Promise((resolve, reject) => {
+      const id = `tg-${roomId}-${Math.random().toString(36).slice(2, 10)}`;
+      const peer = new Peer(id, { debug: 1 });
+      call.peer = peer;
+      const timer = setTimeout(() => reject(new Error('timeout')), 15000);
+
+      peer.on('open', (pid) => {
+        clearTimeout(timer);
+        call.peerId = pid;
         resolve();
       });
+      peer.on('error', (err) => {
+        if (err.type === 'peer-unavailable') {
+          const gone = /peer (\S+)$/.exec(err.message)?.[1];
+          if (gone) removePeer(gone, false);
+        } else if (!call.peerId) {
+          clearTimeout(timer);
+          reject(err);
+        } else {
+          console.warn('PeerJS', err.type, err);
+        }
+      });
+      peer.on('disconnected', () => {
+        if (call.peer === peer && !peer.destroyed) setTimeout(() => !peer.destroyed && peer.reconnect(), 1500);
+      });
+      peer.on('connection', (conn) => call.peer === peer && adoptConn(conn, false));
+      peer.on('call', (mc) => call.peer === peer && adoptMedia(mc, false));
     });
-  }
-
-  function rejoinCall() {
-    for (const id of [...call.peers.keys()]) removePeer(id, false);
-    toast('Újracsatlakozás…');
-    emitJoin();
   }
 
   function leaveCall(navigate = true) {
     if (!call.id) return;
-    S.socket?.emit('leave-room');
+    broadcast({ type: 'bye' });
+    const peer = call.peer;
     for (const id of [...call.peers.keys()]) removePeer(id, false);
+    setTimeout(() => peer?.destroy(), 400); // hadd menjen ki a „bye”
+    call.peer = null;
+    call.peerId = null;
     stopLocalMedia();
     call.id = null;
     call.localTile = null;
     stage.innerHTML = '';
     setSide(false);
+    poll();
     if (navigate) location.hash = '#/';
   }
 
   const localState = () => ({ mic: micOn(), cam: camOn(), screen: !!media.screen });
-  const sendState = () => call.id && S.socket?.emit('state', localState());
+  const sendState = () => call.id && broadcast({ type: 'state', state: localState() });
+
+  // Kikapcsolt kamera/mikrofon helyett néma hang és fekete kép megy, így a
+  // kapcsolat sávjai mindig megvannak, és csak cserélni kell őket.
+  let silentTrack = null;
+  let blackTrack = null;
+  function placeholder(kind) {
+    if (kind === 'audio') {
+      if (!silentTrack || silentTrack.readyState === 'ended') {
+        silentTrack = audioCtx().createMediaStreamDestination().stream.getAudioTracks()[0];
+      }
+      return silentTrack;
+    }
+    if (!blackTrack || blackTrack.readyState === 'ended') {
+      const c = Object.assign(document.createElement('canvas'), { width: 640, height: 360 });
+      c.getContext('2d').fillRect(0, 0, c.width, c.height);
+      blackTrack = c.captureStream(1).getVideoTracks()[0];
+    }
+    return blackTrack;
+  }
+
+  const outStream = () =>
+    new MediaStream([media.audio || placeholder('audio'), currentVideo() || placeholder('video')]);
 
   function replaceSenders(kind, track) {
+    const t = track || placeholder(kind);
     for (const p of call.peers.values()) {
-      p.senders[kind]?.replaceTrack(track).catch(() => {});
+      const pc = p.media?.peerConnection;
+      const sender = pc?.getSenders().find((s) => s.track?.kind === kind);
+      sender?.replaceTrack(t).catch(() => {});
     }
   }
 
@@ -1135,117 +1171,203 @@
 
   new ResizeObserver(() => call.id && layout()).observe(stage);
 
-  // --- WebRTC ----------------------------------------------------------------
-  function addPeer({ id, user, state }) {
-    removePeer(id, false);
-    const pc = new RTCPeerConnection({ iceServers: call.iceServers });
-    const peer = {
-      id,
-      user,
+  // --- Kapcsolatok ----------------------------------------------------------
+  // Minden résztvevővel két kapcsolat van: egy adatcsatorna (chat, állapot,
+  // reakciók) és egy médiahívás (kép + hang). Ha véletlenül mindkét fél egyszerre
+  // hívja a másikat, mindkét oldalon a kisebb azonosítójú fél hívása marad meg.
+  const isDead = (c) => !c || c._dead;
+
+  function ensurePeer(peerId, user, state) {
+    let p = call.peers.get(peerId);
+    if (p) {
+      clearTimeout(p.removeTimer);
+      return p;
+    }
+    p = {
+      id: peerId,
+      user: user || { name: '…', role: '', color: '#555' },
       state: state || { mic: false, cam: false, screen: false },
-      pc,
-      stream: new MediaStream(),
-      senders: {},
-      pending: [],
-      queue: Promise.resolve(),
-      tile: createTile(id, user, false),
+      conn: null,
+      media: null,
+      waits: 0,
+      tile: createTile(peerId, user || { name: '…', role: '', color: '#555' }, false),
     };
-    call.peers.set(id, peer);
-    const video = $('video', peer.tile);
-    video.srcObject = peer.stream;
-
-    pc.onicecandidate = (e) => e.candidate && signal(id, { candidate: e.candidate });
-    pc.ontrack = (e) => {
-      peer.stream.addTrack(e.track);
-      video.srcObject = peer.stream;
-      video.play().catch(() => {});
-      if (e.track.kind === 'audio') watchLevel(`peer:${id}`, e.track, (lvl) => setSpeaking(peer.tile, peer.state.mic && lvl > 0.03));
-    };
-    pc.onconnectionstatechange = () => paintPeer(peer);
-    paintPeer(peer);
-    return peer;
-  }
-
-  function paintPeer(peer) {
-    paintTile(peer.tile, peer.state);
-    const st = peer.pc.connectionState;
-    if (st === 'failed') setBadge(peer.tile, 'Kapcsolat sikertelen', 'warn');
-    else if (st === 'disconnected') setBadge(peer.tile, 'Kapcsolat akadozik…', 'warn');
-    else if (st !== 'connected') setBadge(peer.tile, 'Kapcsolódás…');
-    else setBadge(peer.tile, peer.state.screen ? `${icon('screen')}Képernyőt oszt meg` : '');
-  }
-
-  // A csatlakozó fél küldi az ajánlatot, két sávval (hang + kép), amiket
-  // később csak cserélünk (replaceTrack) – így nincs szükség újratárgyalásra.
-  async function startOffer(peer) {
-    const { pc } = peer;
-    const a = pc.addTransceiver('audio', { direction: 'sendrecv' });
-    const v = pc.addTransceiver('video', { direction: 'sendrecv' });
-    peer.senders = { audio: a.sender, video: v.sender };
-    await a.sender.replaceTrack(media.audio);
-    await v.sender.replaceTrack(currentVideo());
-    await pc.setLocalDescription(await pc.createOffer());
-    signal(peer.id, { sdp: pc.localDescription });
-  }
-
-  function signal(to, data) {
-    S.socket.emit('signal', { to, data });
-  }
-
-  function onPeerJoined(p) {
-    if (!call.id) return;
-    addPeer(p);
+    call.peers.set(peerId, p);
+    paintPeer(p);
     renderPeople();
     layout();
-    toast(`${avatar(p.user)}<span><b>${esc(p.user.name)}</b> csatlakozott</span>`);
+    return p;
   }
 
-  function onSignal({ from, data }) {
-    const peer = call.peers.get(from);
-    if (!peer) return;
-    peer.queue = peer.queue.then(() => handleSignal(peer, data)).catch((e) => console.warn('signal', e));
-  }
-
-  async function handleSignal(peer, data) {
-    const { pc } = peer;
-    if (data.sdp) {
-      await pc.setRemoteDescription(data.sdp);
-      if (data.sdp.type === 'offer') {
-        for (const t of pc.getTransceivers()) {
-          const kind = t.receiver.track.kind;
-          t.direction = 'sendrecv';
-          peer.senders[kind] = t.sender;
-          await t.sender.replaceTrack(kind === 'audio' ? media.audio : currentVideo());
-        }
-        await pc.setLocalDescription(await pc.createAnswer());
-        signal(peer.id, { sdp: pc.localDescription });
-      }
-      for (const c of peer.pending.splice(0)) await pc.addIceCandidate(c).catch(() => {});
-    } else if (data.candidate) {
-      if (pc.remoteDescription) await pc.addIceCandidate(data.candidate).catch(() => {});
-      else peer.pending.push(data.candidate);
+  function reconcileMembers(members) {
+    const present = new Set(members.map((m) => m.peerId));
+    for (const m of members) {
+      const p = call.peers.get(m.peerId);
+      if (p && !isDead(p.conn) && !isDead(p.media)) continue;
+      // Belépéskor mi hívunk mindenkit; utána csak a kisebb azonosítójú fél,
+      // vagy ha két kör óta senki sem kezdeményezett.
+      const waits = (p?.waits || 0) + 1;
+      if (call.joining || call.peerId < m.peerId || waits > 2) connectTo(m);
+      else ensurePeer(m.peerId, m.user, m.state).waits = waits;
+    }
+    for (const [id, p] of call.peers) {
+      if (!present.has(id) && isDead(p.conn) && isDead(p.media)) removePeer(id, true);
     }
   }
 
-  function onPeerState({ id, state }) {
-    const peer = call.peers.get(id);
-    if (!peer) return;
-    const startedScreen = state.screen && !peer.state.screen;
-    peer.state = state;
-    paintPeer(peer);
-    renderPeople();
-    layout();
-    if (startedScreen) toast(`${avatar(peer.user)}<span><b>${esc(peer.user.name)}</b> megosztja a képernyőjét</span>`);
+  function connectTo(m) {
+    if (!call.peer || call.peer.destroyed) return;
+    const p = ensurePeer(m.peerId, m.user, m.state);
+    p.waits = 0;
+    if (isDead(p.conn)) {
+      adoptConn(call.peer.connect(m.peerId, { reliable: true, metadata: { user: S.user, state: localState() } }), true);
+    }
+    if (isDead(p.media)) {
+      adoptMedia(call.peer.call(m.peerId, outStream(), { metadata: { user: S.user, state: localState() } }), true);
+    }
+  }
+
+  // true, ha az új kapcsolatot kell megtartani a meglévő helyett
+  function preferNew(existing, existingInit, newInit) {
+    return isDead(existing) || newInit < existingInit;
+  }
+
+  function adoptConn(conn, outgoing) {
+    if (!conn) return;
+    const p = ensurePeer(conn.peer, outgoing ? null : conn.metadata?.user, outgoing ? null : conn.metadata?.state);
+    const init = outgoing ? call.peerId : conn.peer;
+    if (p.conn && p.conn !== conn) {
+      if (!preferNew(p.conn, p.connInit, init)) return conn.close();
+      const old = p.conn;
+      p.conn = null;
+      old.close();
+    }
+    p.conn = conn;
+    p.connInit = init;
+    conn.on('open', () => {
+      if (p.conn !== conn) return;
+      conn.send({ type: 'hello', user: S.user, state: localState() });
+    });
+    conn.on('data', (d) => p.conn === conn && onData(p, d));
+    conn.on('close', () => {
+      conn._dead = true;
+      if (p.conn === conn) scheduleRemove(p);
+    });
+    conn.on('error', () => (conn._dead = true));
+  }
+
+  function adoptMedia(mc, outgoing) {
+    if (!mc) return;
+    const p = ensurePeer(mc.peer, outgoing ? null : mc.metadata?.user, outgoing ? null : mc.metadata?.state);
+    const init = outgoing ? call.peerId : mc.peer;
+    if (p.media && p.media !== mc) {
+      if (!preferNew(p.media, p.mediaInit, init)) return mc.close();
+      const old = p.media;
+      p.media = null;
+      old.close();
+    }
+    p.media = mc;
+    p.mediaInit = init;
+    if (!outgoing) mc.answer(outStream());
+
+    const video = $('video', p.tile);
+    mc.on('stream', (stream) => {
+      if (p.media !== mc) return;
+      video.srcObject = stream;
+      video.play().catch(() => {});
+      const audio = stream.getAudioTracks()[0];
+      if (audio) watchLevel(`peer:${p.id}`, audio, (lvl) => setSpeaking(p.tile, p.state.mic && lvl > 0.03));
+    });
+    mc.on('close', () => {
+      mc._dead = true;
+      if (p.media === mc) scheduleRemove(p);
+    });
+    mc.on('error', () => (mc._dead = true));
+    mc.peerConnection?.addEventListener('connectionstatechange', () => {
+      if (p.media !== mc) return;
+      paintPeer(p);
+      // végleg megszakadt: eldobjuk, a következő szívverés újraépíti
+      if (mc.peerConnection.connectionState === 'failed') {
+        mc._dead = true;
+        mc.close();
+      }
+    });
+    paintPeer(p);
+  }
+
+  // A kapcsolat bezárult – ha pár másodpercen belül nem épül újra, eltávolítjuk
+  function scheduleRemove(p) {
+    clearTimeout(p.removeTimer);
+    p.removeTimer = setTimeout(() => {
+      if (isDead(p.conn) && isDead(p.media)) removePeer(p.id, true);
+      else paintPeer(p);
+    }, 4000);
+    paintPeer(p);
+  }
+
+  function onData(p, d) {
+    if (!d || typeof d !== 'object') return;
+    if (d.type === 'hello' || d.type === 'state') {
+      const startedScreen = d.state?.screen && !p.state.screen;
+      p.state = { mic: !!d.state?.mic, cam: !!d.state?.cam, screen: !!d.state?.screen };
+      if (d.type === 'hello' && d.user) {
+        const first = !p.greeted;
+        p.user = d.user;
+        p.greeted = true;
+        $('.nm', p.tile).textContent = d.user.name;
+        $('.role', p.tile).textContent = d.user.role;
+        $('.tile-avatar', p.tile).innerHTML = avatar(d.user);
+        if (first) toast(`${avatar(d.user)}<span><b>${esc(d.user.name)}</b> csatlakozott</span>`);
+      }
+      paintPeer(p);
+      renderPeople();
+      layout();
+      if (startedScreen) toast(`${avatar(p.user)}<span><b>${esc(p.user.name)}</b> megosztja a képernyőjét</span>`);
+    } else if (d.type === 'chat' && d.msg) {
+      onChat(d.msg);
+    } else if (d.type === 'reaction' && typeof d.emoji === 'string') {
+      floatEmoji(p.tile, d.emoji.slice(0, 8));
+    } else if (d.type === 'bye') {
+      removePeer(p.id, true);
+    }
+  }
+
+  function broadcast(msg) {
+    for (const p of call.peers.values()) {
+      if (p.conn?.open) {
+        try {
+          p.conn.send(msg);
+        } catch {}
+      }
+    }
+  }
+
+  function paintPeer(p) {
+    paintTile(p.tile, p.state);
+    const st = p.media?.peerConnection?.connectionState;
+    if (isDead(p.media) && isDead(p.conn)) setBadge(p.tile, 'Kapcsolat megszakadt…', 'warn');
+    else if (st === 'failed') setBadge(p.tile, 'Kapcsolat sikertelen', 'warn');
+    else if (st === 'disconnected') setBadge(p.tile, 'Kapcsolat akadozik…', 'warn');
+    else if (st !== 'connected') setBadge(p.tile, 'Kapcsolódás…');
+    else setBadge(p.tile, p.state.screen ? `${icon('screen')}Képernyőt oszt meg` : '');
   }
 
   function removePeer(id, announce) {
-    const peer = call.peers.get(id);
-    if (!peer) return;
-    unwatch(`peer:${id}`);
-    peer.pc.close();
-    peer.tile.remove();
+    const p = call.peers.get(id);
+    if (!p) return;
     call.peers.delete(id);
-    if (announce) toast(`${avatar(peer.user)}<span><b>${esc(peer.user.name)}</b> kilépett</span>`);
+    clearTimeout(p.removeTimer);
+    unwatch(`peer:${id}`);
+    for (const c of [p.conn, p.media]) {
+      if (c) {
+        c._dead = true;
+        try {
+          c.close();
+        } catch {}
+      }
+    }
+    p.tile.remove();
+    if (announce && p.greeted) toast(`${avatar(p.user)}<span><b>${esc(p.user.name)}</b> kilépett</span>`);
     renderPeople();
     layout();
   }
@@ -1272,7 +1394,7 @@
     const btn = e.target.closest('button');
     if (!btn) return;
     const emoji = btn.textContent;
-    S.socket.emit('reaction', emoji);
+    broadcast({ type: 'reaction', emoji });
     floatEmoji(call.localTile, emoji);
     $('#react-pop').hidden = true;
   });
@@ -1358,7 +1480,7 @@
 
   // --- Chat ------------------------------------------------------------------
   function onChat(msg) {
-    if (!call.id) return;
+    if (!call.id || call.msgIds.has(msg.id)) return;
     addMessage(msg, true);
     renderFiles();
     const mine = msg.user.id === S.user.id;
@@ -1381,7 +1503,7 @@
     return `<div class="file-card">
       <div class="fi">${esc(fileExt(f.name))}</div>
       <div class="fmeta"><div class="fname" title="${esc(f.name)}">${esc(f.name)}</div><div class="fsize">${formatSize(f.size)}</div></div>
-      <a class="icon-btn" href="${fileUrl(f.id)}" download title="Letöltés">${icon('download')}</a>
+      <a class="icon-btn" href="${esc(f.downloadUrl || f.url)}" download="${esc(f.name)}" target="_blank" rel="noopener" title="Letöltés">${icon('download')}</a>
     </div>`;
   }
 
@@ -1389,12 +1511,14 @@
     if (msg.type !== 'file') return `<div class="bubble">${linkify(msg.text)}</div>`;
     const f = msg.file;
     if (/^image\//.test(f.mime)) {
-      return `<img class="file-thumb" src="${fileUrl(f.id, true)}" alt="${esc(f.name)}" loading="lazy" data-full="${fileUrl(f.id, true)}" />${fileCardHtml(f)}`;
+      return `<img class="file-thumb" src="${esc(f.url)}" alt="${esc(f.name)}" loading="lazy" data-full="${esc(f.url)}" />${fileCardHtml(f)}`;
     }
     return fileCardHtml(f);
   }
 
   function addMessage(msg, live) {
+    if (call.msgIds.has(msg.id)) return;
+    call.msgIds.add(msg.id);
     call.messages.push(msg);
     const box = $('#messages');
     $('.msg-empty', box)?.remove();
@@ -1417,6 +1541,26 @@
       call.lastGroup = { userId: msg.user.id, ts, stack: $('.msg-stack', g) };
     }
     if (!live || stickToBottom || msg.user.id === S.user.id) scrollMessages();
+  }
+
+  // Előzmények betöltése, illetve ami az adatcsatornán esetleg elveszett
+  async function syncMessages() {
+    const roomId = call.id;
+    try {
+      const since = Math.max(0, call.messages.length - 20);
+      const list = await api(`/api/rooms/${roomId}/messages?since=${since}`);
+      if (call.id !== roomId) return;
+      const first = !call.messages.length;
+      list.forEach((m) => (first ? addMessage(m, false) : onChat(m)));
+      renderFiles();
+    } catch {}
+  }
+
+  async function postMessage(body) {
+    const msg = await api(`/api/rooms/${call.id}/messages`, { method: 'POST', body });
+    onChat(msg);
+    broadcast({ type: 'chat', msg });
+    return msg;
   }
 
   function renderMessagesEmpty() {
@@ -1475,9 +1619,13 @@
     e.preventDefault();
     const text = input.value.trim();
     if (!text) return;
-    S.socket.emit('chat', text);
     input.value = '';
     autosize();
+    postMessage({ type: 'text', text }).catch((err) => {
+      input.value = text;
+      autosize();
+      toast(esc(err.message), { type: 'error' });
+    });
   });
 
   // --- Fájlfeltöltés ---------------------------------------------------------
@@ -1487,8 +1635,11 @@
     e.target.value = '';
   });
 
-  function uploadFile(file) {
+  async function uploadFile(file) {
     if (!call.id) return;
+    if (S.config.storage === 'none') {
+      return toast('A fájlmegosztáshoz kapcsold be a Vercel Blobot (Storage → Blob → Connect).', { type: 'error', ms: 7000 });
+    }
     const max = S.config.maxUploadMb * 1024 * 1024;
     if (file.size > max) return toast(`${esc(file.name)} túl nagy (max ${S.config.maxUploadMb} MB).`, { type: 'error' });
 
@@ -1497,33 +1648,55 @@
     row.className = 'upload-row';
     row.innerHTML = `<div>Feltöltés: <b>${esc(file.name)}</b> · <span class="pct">0%</span></div><div class="bar"><i></i></div>`;
     $('#uploads').append(row);
-
-    const fd = new FormData();
-    fd.append('file', file);
-    const xhr = new XMLHttpRequest();
-    xhr.open('POST', `/api/rooms/${call.id}/files`);
-    xhr.setRequestHeader('Authorization', `Bearer ${S.token}`);
-    xhr.upload.onprogress = (e) => {
-      if (!e.lengthComputable) return;
-      const pct = Math.round((e.loaded / e.total) * 100);
+    const progress = (pct) => {
       $('.bar i', row).style.width = `${pct}%`;
-      $('.pct', row).textContent = `${pct}%`;
+      $('.pct', row).textContent = `${Math.round(pct)}%`;
     };
-    xhr.onload = () => {
+
+    try {
+      const stored = S.config.storage === 'blob' ? await uploadToBlob(file, progress) : await uploadLocal(file, progress);
+      await postMessage({
+        type: 'file',
+        file: { name: file.name, size: file.size, mime: file.type, url: stored.url, downloadUrl: stored.downloadUrl },
+      });
+    } catch (err) {
+      toast(esc(err.message || 'Feltöltési hiba.'), { type: 'error' });
+    } finally {
       row.remove();
-      if (xhr.status >= 300) {
-        let msg = 'Feltöltési hiba.';
+    }
+  }
+
+  // Vercel Blob: a fájl közvetlenül a tárhelyre megy, a szerver csak engedélyt ad
+  async function uploadToBlob(file, progress) {
+    const safe = file.name.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\w.-]+/g, '_') || 'fajl';
+    const blob = await VercelBlob.upload(`${call.id}/${safe}`, file, {
+      access: 'public',
+      handleUploadUrl: '/api/upload',
+      clientPayload: S.token,
+      contentType: file.type || undefined,
+      multipart: file.size > 20 * 1024 * 1024,
+      onUploadProgress: ({ percentage }) => progress(percentage),
+    });
+    return { url: blob.url, downloadUrl: blob.downloadUrl };
+  }
+
+  function uploadLocal(file, progress) {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', `/api/local-upload?name=${encodeURIComponent(file.name)}`);
+      xhr.setRequestHeader('Authorization', `Bearer ${S.token}`);
+      xhr.upload.onprogress = (e) => e.lengthComputable && progress((e.loaded / e.total) * 100);
+      xhr.onload = () => {
+        let data = {};
         try {
-          msg = JSON.parse(xhr.responseText).error || msg;
+          data = JSON.parse(xhr.responseText);
         } catch {}
-        toast(esc(msg), { type: 'error' });
-      }
-    };
-    xhr.onerror = () => {
-      row.remove();
-      toast('Feltöltési hiba – ellenőrizd a kapcsolatot.', { type: 'error' });
-    };
-    xhr.send(fd);
+        if (xhr.status >= 300) reject(new Error(data.error || 'Feltöltési hiba.'));
+        else resolve(data);
+      };
+      xhr.onerror = () => reject(new Error('Feltöltési hiba – ellenőrizd a kapcsolatot.'));
+      xhr.send(file);
+    });
   }
 
   // Húzd és ejtsd az egész hívás ablakra

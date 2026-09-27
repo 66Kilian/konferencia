@@ -2,18 +2,22 @@
   "name": "targyalo",
   "version": "1.0.0",
   "private": true,
-  "description": "Privát videókonferencia Kilian és Krisztián számára",
-  "main": "server.js",
+  "description": "Privát videókonferencia – Vercelen és helyben is fut",
+  "main": "dev-server.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node --watch server.js"
+    "start": "node dev-server.js",
+    "dev": "node --watch dev-server.js",
+    "vendor": "cp node_modules/peerjs/dist/peerjs.min.js public/vendor/ && esbuild scripts/blob-entry.js --bundle --minify --format=iife --global-name=VercelBlob --platform=browser --target=es2020 --outfile=public/vendor/blob-client.js"
   },
   "engines": {
     "node": ">=18"
   },
   "dependencies": {
-    "express": "^4.21.2",
-    "multer": "^2.0.2",
-    "socket.io": "^4.8.1"
+    "@upstash/redis": "^1.39.0",
+    "@vercel/blob": "^2.8.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2",
+    "peerjs": "^1.5.5"
   }
 }
