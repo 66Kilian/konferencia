@@ -44,7 +44,7 @@ Ezután nyisd meg: http://localhost:3000. Helyben nem kell se Redis, se Blob: az
 
 ## Funkciók
 
-- **Regisztráció:** név, szerep, 4 jegyű kód, majd a kód megismétlése. Csak a kód hash-e kerül mentésre. 5 rossz próbálkozás után 5 perc zárolás.
+- **Regisztráció:** név, szerep, 4 jegyű kód, majd a kód megismétlése. A regisztráció éles oldalon le van zárva (lásd Biztonság).
 - **Meetingek:** azonnali indítás vagy meghirdetés címmel, napirenddel, időponttal és hosszal. A meghívó link a vágólapra kerül.
 - **Élő jelzés:** látod, ki van online, és ki melyik hívásban ül. Ha a másik belép, értesítést kapsz.
 - **Hívás:** mikrofon (`M`), kamera (`V`), képernyőmegosztás (`S`), kiemelt nézet, beszélő kiemelése, reakciók.
