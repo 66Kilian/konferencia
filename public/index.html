@@ -337,6 +337,7 @@
           <button class="ctrl" id="lobby-mic" title="Mikrofon"><svg class="i"><use href="#i-mic"/></svg></button>
           <button class="ctrl" id="lobby-cam" title="Kamera"><svg class="i"><use href="#i-cam"/></svg></button>
         </div>
+        <div class="mic-status" id="lobby-mic-status" role="status"></div>
         <div class="device-row">
           <label class="field field-sm"><span>Mikrofon</span><select id="sel-mic"></select></label>
           <label class="field field-sm"><span>Kamera</span><select id="sel-cam"></select></label>
@@ -374,6 +375,15 @@
         <button class="btn btn-ghost btn-sm" id="btn-copy-room"><svg class="i"><use href="#i-link"/></svg><span>Link</span></button>
       </div>
     </header>
+
+    <div class="room-alerts">
+      <div class="mic-alert" id="mic-alert" role="alert" hidden>
+        <svg class="i"><use href="#i-mic-off"/></svg>
+        <span id="mic-alert-text"></span>
+        <button class="btn btn-sm btn-primary" id="mic-fix" type="button">Javítás</button>
+      </div>
+      <button class="sound-unlock" id="sound-unlock" type="button" hidden>🔊 A böngésző némította a többieket – kattints ide a hang bekapcsolásához</button>
+    </div>
 
     <div class="room-body">
       <div class="stage" id="stage"></div>

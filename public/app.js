@@ -1063,7 +1063,7 @@
   const prefs = Object.assign({ mic: true, cam: true, micId: '', camId: '' }, local.get('tg_prefs', {}));
   const savePrefs = () => local.set('tg_prefs', prefs);
 
-  const media = { audio: null, video: null, screen: null };
+  const media = { audio: null, video: null, screen: null, audioError: null };
   const micOn = () => prefs.mic && !!media.audio;
   const camOn = () => prefs.cam && !!media.video;
   const currentVideo = () => media.screen || (camOn() ? media.video : null);
@@ -1083,18 +1083,21 @@
 
   const hasMediaApi = () => !!navigator.mediaDevices?.getUserMedia;
 
-  async function getTrack(kind) {
+  async function getTrack(kind, { quiet = false } = {}) {
     if (!hasMediaApi()) return null;
     const constraints = kind === 'audio' ? { audio: audioConstraints() } : { video: videoConstraints() };
     try {
       const s = await navigator.mediaDevices.getUserMedia(constraints);
+      if (kind === 'audio') media.audioError = null;
       return s.getTracks()[0];
     } catch (err) {
       // ha a mentett eszköz eltűnt, próbáljuk az alapértelmezettel
       if (err.name === 'OverconstrainedError' || err.name === 'NotFoundError') {
-        if (kind === 'audio' && prefs.micId) return (prefs.micId = ''), getTrack(kind);
-        if (kind === 'video' && prefs.camId) return (prefs.camId = ''), getTrack(kind);
+        if (kind === 'audio' && prefs.micId) return (prefs.micId = ''), getTrack(kind, { quiet });
+        if (kind === 'video' && prefs.camId) return (prefs.camId = ''), getTrack(kind, { quiet });
       }
+      if (kind === 'audio') media.audioError = err.name || 'Error';
+      if (quiet) return null;
       const what = kind === 'audio' ? 'mikrofonhoz' : 'kamerához';
       const msg =
         err.name === 'NotAllowedError'
@@ -1124,14 +1127,104 @@
       if (wantAudio) media.audio = await getTrack('audio');
       if (wantVideo) media.video = await getTrack('video');
     }
-    if (media.audio) media.audio.enabled = prefs.mic;
-    watchLevel('local', media.audio, onLocalLevel);
+    if (media.audio) {
+      media.audioError = null;
+      adoptMic(media.audio);
+    }
     // ha közben már csatlakozott a hívásba, a sávokat is frissíteni kell
     replaceSenders('audio', media.audio);
     replaceSenders('video', currentVideo());
     refreshLocal();
     fillDeviceSelects();
   }
+
+  // Új mikrofon-sáv bekötése: némítás, szintmérő, hívás, és ha kihúzzák, újrapróbálás
+  function adoptMic(track) {
+    media.audio = track;
+    track.enabled = prefs.mic;
+    track.addEventListener('ended', () => {
+      if (media.audio !== track) return;
+      media.audio = null;
+      paintMicStatus();
+      toast('A mikrofon lecsatlakozott – próbálom az alapértelmezettel…', { type: 'error' });
+      setTimeout(() => fixMic(true), 600);
+    });
+    watchLevel('local', track, onLocalLevel);
+    replaceSenders('audio', track);
+  }
+
+  function micHelp() {
+    if (!hasMediaApi()) return 'A mikrofon csak a https://konferencia.pureshine.hu címen működik.';
+    switch (media.audioError) {
+      case 'NotAllowedError':
+      case 'SecurityError':
+        return 'A böngésző letiltotta a mikrofont. Kattints a címsor bal oldalán a lakat ikonra → Mikrofon: Engedélyezés, majd a Javítás gombra.';
+      case 'NotFoundError':
+      case 'OverconstrainedError':
+        return 'Nem található mikrofon. Csatlakoztass egyet (vagy fülhallgatót), majd kattints a Javításra.';
+      case 'NotReadableError':
+      case 'AbortError':
+        return 'A mikrofont egy másik program használja (pl. Zoom, Teams, Discord). Zárd be, majd kattints a Javításra.';
+      default:
+        return 'A mikrofonod nem elérhető, ezért a többiek nem hallanak. Kattints a Javításra.';
+    }
+  }
+
+  function paintMicStatus() {
+    const st = $('#lobby-mic-status');
+    if (!media.audio) {
+      st.className = 'mic-status bad';
+      st.innerHTML = `${esc(micHelp())} <button class="btn btn-sm btn-ghost" type="button" data-mic-fix>Javítás</button>`;
+    } else if (!prefs.mic) {
+      st.className = 'mic-status';
+      st.textContent = 'Némítva lépsz be – a mikrofon gombbal kapcsolhatod be.';
+    } else {
+      st.className = 'mic-status ok';
+      st.textContent = '✓ A mikrofon működik – szólalj meg, és figyeld a csíkokat a kép bal felső sarkában.';
+    }
+    const alert = $('#mic-alert');
+    alert.hidden = !call.id || !!media.audio;
+    if (!alert.hidden) $('#mic-alert-text').textContent = micHelp();
+  }
+
+  // A mikrofon újrakérése (Javítás gomb, vagy kihúzás után automatikusan)
+  async function fixMic(auto = false) {
+    audioCtx();
+    const track = await getTrack('audio', { quiet: true });
+    if (track) {
+      prefs.mic = true;
+      savePrefs();
+      media.audio?.stop();
+      adoptMic(track);
+      refreshLocal();
+      fillDeviceSelects();
+      toast(`${icon('check')} A mikrofon működik`);
+    } else if (!auto) {
+      toast(esc(micHelp()), { type: 'error', ms: 8000 });
+    }
+    paintMicStatus();
+  }
+
+  $('#mic-fix').addEventListener('click', (e) => busy(e.currentTarget, () => fixMic()));
+  $('#lobby-mic-status').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-mic-fix]');
+    if (b) busy(b, () => fixMic());
+  });
+  navigator.mediaDevices?.addEventListener?.('devicechange', () => fillDeviceSelects());
+
+  // A többiek hangja külön lejátszón szól; ha a böngésző blokkolja, gombbal oldjuk fel
+  function playRemoteAudio(el) {
+    el.play()
+      .then(() => {
+        if ([...$$('#stage audio')].every((a) => !a.paused || !a.srcObject)) $('#sound-unlock').hidden = true;
+      })
+      .catch(() => ($('#sound-unlock').hidden = false));
+  }
+  $('#sound-unlock').addEventListener('click', () => {
+    audioCtx();
+    $$('#stage audio').forEach((a) => a.srcObject && playRemoteAudio(a));
+    $('#sound-unlock').hidden = true;
+  });
 
   function stopLocalMedia() {
     unwatch('local');
@@ -1145,10 +1238,9 @@
     prefs.mic = on;
     savePrefs();
     if (on && !media.audio) {
-      media.audio = await getTrack('audio');
-      if (!media.audio) prefs.mic = false;
-      watchLevel('local', media.audio, onLocalLevel);
-      replaceSenders('audio', media.audio);
+      const track = await getTrack('audio');
+      if (track) adoptMic(track);
+      else prefs.mic = false;
     }
     if (media.audio) media.audio.enabled = prefs.mic;
     refreshLocal();
@@ -1196,6 +1288,7 @@
   }
 
   function refreshLocal() {
+    paintMicStatus();
     if (S.view === 'lobby') paintLobby();
     if (call.id) {
       paintLocalTile();
@@ -1225,12 +1318,11 @@
     prefs.micId = e.target.value;
     savePrefs();
     const track = await getTrack('audio');
-    if (!track) return;
-    media.audio?.stop();
-    media.audio = track;
-    track.enabled = prefs.mic;
-    watchLevel('local', track, onLocalLevel);
-    replaceSenders('audio', track);
+    if (!track) return paintMicStatus();
+    const old = media.audio;
+    adoptMic(track);
+    old?.stop();
+    refreshLocal();
   });
 
   $('#sel-cam').addEventListener('change', async (e) => {
@@ -1425,6 +1517,7 @@
     call.agendaTarget = meeting.agendaTarget;
     show('room');
     paintMusicButtons();
+    paintMicStatus();
 
     call.agenda = lobbyAgenda;
     renderAgenda();
@@ -1495,6 +1588,7 @@
     stage.innerHTML = '';
     setSide(false);
     paintMusicButtons();
+    paintMicStatus();
     poll();
     if (navigate) location.hash = '#/';
   }
@@ -1539,7 +1633,7 @@
     el.className = 'tile';
     el.dataset.key = key;
     el.innerHTML = `
-      <video autoplay playsinline ${isLocal ? 'muted' : ''}></video>
+      <video autoplay playsinline muted></video>${isLocal ? '' : '<audio autoplay></audio>'}
       <div class="tile-avatar">${avatar(user)}</div>
       <div class="tile-label"><span class="mic"></span><span class="nm">${esc(user.name)}${isLocal ? ' (te)' : ''}</span><span class="role">${esc(user.role)}</span></div>
       <div class="tile-badge" hidden></div>
@@ -1747,6 +1841,9 @@
       if (p.media !== mc) return;
       video.srcObject = stream;
       video.play().catch(() => {});
+      const player = $('audio', p.tile);
+      player.srcObject = new MediaStream(stream.getAudioTracks());
+      playRemoteAudio(player);
       const audio = stream.getAudioTracks()[0];
       if (audio) watchLevel(`peer:${p.id}`, audio, (lvl) => setSpeaking(p.tile, p.state.mic && lvl > 0.03));
     });
