@@ -2,7 +2,7 @@
 <html lang="hu">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
   <title>Tárgyaló</title>
   <meta name="theme-color" content="#0b0c10" />
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%237c5cff'/%3E%3Cpath d='M9 11h9a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2v-6a2 2 0 0 1 2-2Zm11 4 5-3v8l-5-3' fill='white'/%3E%3C/svg%3E" />
@@ -53,6 +53,7 @@
       <symbol id="i-velyric" viewBox="0 0 64 56"><path d="M2 9.5c7.6-.9 14.6-.4 18.4 3.2 4.5 4.3 7.2 13.5 12.4 21.8 3.6 5.8 7.2 8.8 12.6 11.4-7.4 5-16.6 7.2-22.2 1.6C17.6 41.9 14.8 28.7 10.3 20.1 8 15.7 5.6 12.6 2 9.5Z" fill="url(#vy-main)" stroke="none"/><path d="M31.3 26.8c4.9-8.1 11.6-15.7 21.6-16.7 3.4-.3 6.7.1 9.1.8-3.8 1.7-7 4.8-10 8.9-4.8 6.6-11.8 8.9-20.7 7Z" fill="url(#vy-wing)" stroke="none"/><path d="M36.6 38.4c5.1-8.1 12-15.2 21.8-15.9 2.4-.2 4.5.1 5.6.4-3.4 1.8-6.1 4.8-8.8 8.7-4.6 6.7-11 8.7-18.6 6.8Z" fill="url(#vy-wing)" stroke="none"/></symbol>
       <linearGradient id="vy-main" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#E600FF"/><stop offset="0.55" stop-color="#D1005E"/><stop offset="1" stop-color="#FF1740"/></linearGradient>
       <linearGradient id="vy-wing" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#E0005F"/><stop offset="0.6" stop-color="#FF3D5E"/><stop offset="1" stop-color="#FF9A5C"/></linearGradient>
+      <symbol id="i-flip" viewBox="0 0 24 24"><path d="M11 19H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h5"/><path d="M13 5h7a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-5"/><circle cx="12" cy="12" r="3"/><path d="m18 22-3-3 3-3"/><path d="m6 2 3 3-3 3"/></symbol>
       <symbol id="i-shield" viewBox="0 0 24 24"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="M12 8v4"/><path d="M12 16h.01"/></symbol>
     </defs>
   </svg>
@@ -439,6 +440,7 @@
       <div class="controls-center">
         <button class="ctrl" id="ctl-mic" title="Mikrofon (M)"><svg class="i"><use href="#i-mic"/></svg></button>
         <button class="ctrl" id="ctl-cam" title="Kamera (V)"><svg class="i"><use href="#i-cam"/></svg></button>
+        <button class="ctrl" id="ctl-flip" title="Kamera váltása (elöl/hátul)" hidden><svg class="i"><use href="#i-flip"/></svg></button>
         <button class="ctrl" id="ctl-screen" title="Képernyőmegosztás (S)"><svg class="i"><use href="#i-screen"/></svg></button>
         <div class="react-wrap">
           <button class="ctrl" id="ctl-react" title="Reakció"><svg class="i"><use href="#i-smile"/></svg></button>

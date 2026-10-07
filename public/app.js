@@ -1157,8 +1157,15 @@
     if (!hasMediaApi()) return 'A mikrofon csak a https://konferencia.pureshine.hu címen működik.';
     switch (media.audioError) {
       case 'NotAllowedError':
-      case 'SecurityError':
-        return 'A böngésző letiltotta a mikrofont. Kattints a címsor bal oldalán a lakat ikonra → Mikrofon: Engedélyezés, majd a Javítás gombra.';
+      case 'SecurityError': {
+        const ua = navigator.userAgent;
+        const how = /iPhone|iPad|iPod/.test(ua)
+          ? 'Koppints a címsorban az „aA” ikonra → Webhelybeállítások → Mikrofon: Engedélyezés'
+          : /Android/.test(ua)
+            ? 'Koppints a címsor bal oldalán az ikonra → Engedélyek → Mikrofon: Engedélyezés'
+            : 'Kattints a címsor bal oldalán a lakat ikonra → Mikrofon: Engedélyezés';
+        return `A böngésző letiltotta a mikrofont. ${how}, majd nyomd meg a Javítás gombot.`;
+      }
       case 'NotFoundError':
       case 'OverconstrainedError':
         return 'Nem található mikrofon. Csatlakoztass egyet (vagy fülhallgatót), majd kattints a Javításra.';
@@ -1518,6 +1525,8 @@
     show('room');
     paintMusicButtons();
     paintMicStatus();
+    keepAwake(true);
+    paintFlipButton();
 
     call.agenda = lobbyAgenda;
     renderAgenda();
@@ -1589,6 +1598,7 @@
     setSide(false);
     paintMusicButtons();
     paintMicStatus();
+    keepAwake(false);
     poll();
     if (navigate) location.hash = '#/';
   }
@@ -1669,7 +1679,7 @@
     const video = $('video', el);
     const v = currentVideo();
     if (video.srcObject?.getVideoTracks()[0] !== v) video.srcObject = v ? new MediaStream([v]) : null;
-    el.classList.toggle('mirror', !media.screen);
+    el.classList.toggle('mirror', !media.screen && media.video?.getSettings().facingMode !== 'environment');
     paintTile(el, localState());
     setBadge(el, media.screen ? `${icon('screen')}Te osztod meg a képernyőd` : '');
   }
@@ -1691,6 +1701,15 @@
     const featured = call.pinned || (remoteScreen || localScreen)?.dataset.key || null;
     const spotlight = !!featured && tiles.length > 1;
 
+    // telefonon, kettesben: a másik fél teljes képen, te a sarokban
+    const pip = !spotlight && tiles.length === 2 && window.innerWidth <= 640;
+    stage.classList.toggle('pip', pip);
+    if (pip) {
+      stage.style.gridTemplateColumns = '';
+      stage.style.gridTemplateRows = '';
+      tiles.forEach((t) => t.classList.remove('featured'));
+      return;
+    }
     stage.classList.toggle('spotlight', spotlight);
     tiles.forEach((t) => {
       t.classList.toggle('featured', spotlight && t.dataset.key === featured);
@@ -3006,6 +3025,67 @@
     const item = e.target.closest('.music-item');
     if (item) playMusic(item.dataset.uri);
   });
+
+  // =========================================================================
+  // Telefon
+  // =========================================================================
+  // A teljes képernyős chat-lap a látható részhez igazodik (iOS billentyűzet)
+  const vv = window.visualViewport;
+  function syncViewport() {
+    if (!vv) return;
+    document.documentElement.style.setProperty('--vvh', `${vv.height}px`);
+    document.documentElement.style.setProperty('--vvt', `${vv.offsetTop}px`);
+  }
+  vv?.addEventListener('resize', syncViewport);
+  vv?.addEventListener('scroll', syncViewport);
+  syncViewport();
+
+  // Hívás közben ne aludjon el a kijelző
+  let wakeLock = null;
+  async function keepAwake(on) {
+    try {
+      if (on && !wakeLock && navigator.wakeLock && document.visibilityState === 'visible') {
+        wakeLock = await navigator.wakeLock.request('screen');
+        wakeLock.addEventListener('release', () => (wakeLock = null));
+      } else if (!on && wakeLock) {
+        await wakeLock.release();
+        wakeLock = null;
+      }
+    } catch {
+      wakeLock = null;
+    }
+  }
+  document.addEventListener('visibilitychange', () => call.id && keepAwake(true));
+
+  // Képernyőmegosztás csak ott, ahol a böngésző tudja (telefonon jellemzően nem)
+  $('#ctl-screen').hidden = !navigator.mediaDevices?.getDisplayMedia;
+
+  // Kamera váltása (pl. elülső / hátsó), ha több kamera van
+  async function paintFlipButton() {
+    const cams = navigator.mediaDevices?.enumerateDevices
+      ? (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'videoinput')
+      : [];
+    $('#ctl-flip').hidden = cams.length < 2;
+    return cams;
+  }
+  $('#ctl-flip').addEventListener('click', (e) =>
+    busy(e.currentTarget, async () => {
+      const cams = await paintFlipButton();
+      if (cams.length < 2) return;
+      const current = media.video?.getSettings().deviceId;
+      const i = cams.findIndex((c) => c.deviceId === current);
+      prefs.camId = cams[(i + 1) % cams.length].deviceId;
+      savePrefs();
+      prefs.cam = true;
+      const track = await getTrack('video');
+      if (!track) return;
+      media.video?.stop();
+      media.video = track;
+      replaceSenders('video', currentVideo());
+      refreshLocal();
+    })
+  );
+  navigator.mediaDevices?.addEventListener?.('devicechange', paintFlipButton);
 
   // =========================================================================
   // Indulás
