@@ -69,7 +69,9 @@
     }
   }
 
-  const roomUrl = (id) => `${location.origin}/#/room/${id}`;
+  // Egyetlen szoba van: a Konferencia
+  const ROOM_ID = 'c0ffee0001';
+  const roomUrl = () => `${location.origin}/#/room`;
 
   function toast(html, { type = '', onClick, ms = 3800 } = {}) {
     const el = document.createElement('div');
@@ -120,6 +122,10 @@
       throw new Error(data.error || 'Lépj be újra.');
     }
     if (res.status === 403 && data.code === 'mfa_setup' && S.user) startMfaSetup();
+    if (res.status === 403 && data.code === 'no_access' && S.user) {
+      S.member = false;
+      showNoAccess();
+    }
     if (!res.ok) throw Object.assign(new Error(data.error || 'Hiba történt.'), { code: data.code });
     return data;
   }
@@ -136,11 +142,11 @@
 
   function route() {
     if (!S.user) return showAuth();
-    const m = location.hash.match(/^#\/room\/([a-f0-9]+)/);
-    if (m) {
-      if (call.id === m[1]) return show('room');
-      if (call.id) leaveCall(false);
-      return openLobby(m[1]);
+    if (S.member === false) return showNoAccess();
+    // a régi, meetingenkénti linkek (#/room/<id>) is a Konferenciába visznek
+    if (/^#\/room(\/|$)/.test(location.hash)) {
+      if (call.id) return show('room');
+      return openLobby();
     }
     if (call.id) leaveCall(false);
     showHome();
@@ -457,9 +463,10 @@
     }
   });
 
-  function setSession({ user, alert, mfa }) {
+  function setSession({ user, alert, mfa, member }) {
     S.user = user;
     S.mfa = mfa;
+    if (member === false) S.member = false;
     local.set('tg_token', null); // régi, localStorage-os munkamenet eltakarítása
     if (!mfa?.enabled) return startMfaSetup();
     route();
@@ -505,6 +512,7 @@
     clearTimeout(pollTimer);
     closeMusic();
     S.user = null;
+    S.member = undefined;
     showAuth();
   }
 
@@ -538,10 +546,27 @@
     } finally {
       polling = false;
     }
-    if (S.user) pollTimer = setTimeout(poll, call.id ? 10000 : document.hidden ? 30000 : 8000);
+    if (S.user) pollTimer = setTimeout(poll, S.member === false ? 10000 : call.id ? 10000 : document.hidden ? 30000 : 8000);
   }
 
   function applyPresence(res) {
+    if (res.member === false) {
+      S.member = false;
+      return showNoAccess();
+    }
+    if (S.member === false) {
+      // most kapott hozzáférést
+      S.member = true;
+      toast(`${icon('check')} Beengedtek a Konferenciába!`);
+      location.hash = '#/';
+      route();
+    }
+    S.member = true;
+    S.room = res.room;
+    S.access = res.access;
+    S.activeMeeting = res.activeMeeting;
+    S.nextMeeting = res.nextMeeting;
+    if (call.id) call.agendaTarget = res.agendaTarget;
     notifyNewLive(S.live, res.live);
     S.live = res.live;
     S.online = res.online;
@@ -584,7 +609,7 @@
       const before = new Set((prev[roomId] || []).map((u) => u.id));
       const joined = users.filter((u) => !before.has(u.id) && u.id !== S.user?.id);
       if (!joined.length) continue;
-      const meeting = S.meetings.find((m) => m.id === roomId);
+      const meeting = { title: 'Konferencia' };
       const u = joined[0];
       toast(
         `${avatar(u)}<span><b>${esc(u.name)}</b> belépett: ${esc(meeting?.title || 'meeting')} – kattints a csatlakozáshoz</span>`,
@@ -592,6 +617,131 @@
       );
     }
   }
+
+  // =========================================================================
+  // Hozzáférés: aki nincs beengedve, csak a várakozó képernyőt látja
+  // =========================================================================
+  function showNoAccess() {
+    if (call.id) leaveCall(false);
+    stopLocalMedia();
+    show('auth');
+    authStep('no-access');
+    $('#no-access-text').textContent =
+      `Szia ${S.user?.name || ''}! A fiókod kész. A Konferenciába a CEO enged be – amint megkapod a hozzáférést, ez az oldal magától továbblép.`;
+  }
+
+  $('#no-access-logout').addEventListener('click', async () => {
+    await api('/api/logout', { method: 'POST' }).catch(() => {});
+    logoutLocal();
+  });
+
+  // --- A Konferencia kártya a főoldalon --------------------------------------
+  function renderRoomHero() {
+    const inside = S.room?.live || [];
+    const hero = $('#room-hero');
+    hero.classList.toggle('is-live', inside.length > 0);
+    $('#room-status-text').textContent = inside.length ? `Élő · ${inside.length} fő bent` : 'Csendes';
+    $('#room-people').innerHTML = inside.length
+      ? `<span class="stack-avatars">${inside.map((u) => avatar(u)).join('')}</span>
+         <span><b>${inside.map((u) => esc(u.name)).join(', ')}</b> ${inside.length > 1 ? 'bent vannak' : 'bent van'}</span>`
+      : '<span>Most üres – lépj be elsőként, a többiek értesítést kapnak.</span>';
+
+    const chips = [];
+    const chip = (m, label, cls) => {
+      const { start, end } = meetingTimes(m);
+      const day = sameDay(start, new Date()) ? '' : `${monthFmt.format(start)} ${start.getDate()}. `;
+      return `<span class="meta-chip ${cls}">${icon(cls === 'now' ? 'zap' : 'calendar')}${label}: <b>${esc(m.title)}</b> · ${day}${hm(start)}–${hm(end)}</span>`;
+    };
+    if (S.activeMeeting) chips.push(chip(S.activeMeeting, 'Most', 'now'));
+    if (S.nextMeeting && S.nextMeeting.id !== S.activeMeeting?.id) chips.push(chip(S.nextMeeting, 'Következő', ''));
+    if (!chips.length) chips.push(`<span class="meta-chip">${icon('calendar')}Nincs meghirdetett meeting – a szoba bármikor nyitva áll</span>`);
+    $('#room-meeting').innerHTML = chips.join('');
+
+    // CEO: hozzáférés gomb, rajta a várakozók száma
+    const isCeo = S.user?.role === 'CEO';
+    $('#btn-access').hidden = !isCeo;
+    $('#btn-schedule').hidden = !isCeo;
+    if (isCeo && S.access) {
+      $('#access-label').textContent = S.access.mode === 'all' ? 'Mindenki bejöhet' : 'Csak kiválasztottak';
+      const waiting = S.users.filter((u) => !isMemberClient(u)).length;
+      $('#access-waiting').hidden = !waiting || S.access.mode === 'all';
+      $('#access-waiting').textContent = waiting;
+      $('#access-waiting').title = `${waiting} ember vár beengedésre`;
+    }
+  }
+
+  const isMemberClient = (u) =>
+    S.lockedUsers?.includes(u.id) || S.access?.mode === 'all' || !!S.access?.allowed?.includes(u.id);
+
+  $('#btn-enter-room').addEventListener('click', () => (location.hash = '#/room'));
+  $('#btn-copy-home').addEventListener('click', async () => {
+    await copyText(roomUrl());
+    toast(`${icon('check')} A Konferencia linkje a vágólapon`);
+  });
+
+  // --- Hozzáférés dialógus (CEO) ---------------------------------------------
+  const dlgAccess = $('#dlg-access');
+  let accessDraft = null;
+
+  function renderAccessDialog() {
+    const mode = accessDraft.mode;
+    $$('#access-mode button').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.mode === mode)));
+    $('#access-hint').textContent =
+      mode === 'all'
+        ? 'Bárki, aki regisztrál, beléphet a Konferenciába, és látja a célokat, jegyzeteket.'
+        : 'Csak a bepipált emberek jöhetnek be. A többiek egy várakozó képernyőt látnak, adatot nem.';
+    const list = $('#access-list');
+    list.classList.toggle('disabled', mode === 'all');
+    list.innerHTML = S.users
+      .map((u) => {
+        const fixed = S.lockedUsers?.includes(u.id);
+        const on = fixed || accessDraft.allowed.includes(u.id);
+        const waiting = !fixed && !S.access?.allowed?.includes(u.id);
+        return `<label class="access-row ${fixed ? 'fixed' : ''}">
+          <input type="checkbox" data-user="${u.id}" ${on ? 'checked' : ''} ${fixed ? 'disabled' : ''} />
+          ${avatar(u)}
+          <span class="who"><span class="name">${esc(u.name)}</span>
+          <span class="sub">${esc(u.role)}${fixed ? ' · mindig bejöhet' : waiting ? ' · <span class="new">vár beengedésre</span>' : ''}</span></span>
+        </label>`;
+      })
+      .join('');
+  }
+
+  $('#btn-access').addEventListener('click', () => {
+    accessDraft = { mode: S.access?.mode || 'list', allowed: [...(S.access?.allowed || [])] };
+    renderAccessDialog();
+    dlgAccess.showModal();
+  });
+  $('#access-mode').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-mode]');
+    if (!b) return;
+    accessDraft.mode = b.dataset.mode;
+    renderAccessDialog();
+  });
+  $('#access-list').addEventListener('change', (e) => {
+    const cb = e.target.closest('[data-user]');
+    if (!cb) return;
+    const id = cb.dataset.user;
+    accessDraft.allowed = cb.checked ? [...new Set([...accessDraft.allowed, id])] : accessDraft.allowed.filter((x) => x !== id);
+  });
+  dlgAccess.addEventListener('click', (e) => {
+    if (e.target.closest('[data-close]') || e.target === dlgAccess) dlgAccess.close();
+  });
+  $('#access-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    busy($('#access-form button[type=submit]'), async () => {
+      try {
+        const res = await api('/api/room/access', { method: 'POST', body: accessDraft });
+        S.access = res.access;
+        dlgAccess.close();
+        toast(`${icon('check')} Hozzáférés mentve: ${res.access.mode === 'all' ? 'mindenki bejöhet' : 'csak a kiválasztottak'}`);
+        renderRoomHero();
+        poll();
+      } catch (err) {
+        toast(esc(err.message), { type: 'error' });
+      }
+    });
+  });
 
   // =========================================================================
   // Főoldal
@@ -645,7 +795,7 @@
     const { start, end } = meetingTimes(m);
     const live = S.live[m.id] || [];
     const when = relativeWhen(m);
-    const mine = m.createdBy === S.user.id;
+    const mine = S.user.role === 'CEO';
     const whenHtml = live.length
       ? `<span class="m-live">${live.length} fő bent van</span>`
       : `<span class="${when.soon ? 'm-when-soon' : ''}">${esc(when.text)}</span>`;
@@ -664,7 +814,7 @@
       <div class="m-actions">
         <button class="icon-btn" data-act="copy" title="Link másolása">${icon('link')}</button>
         ${mine ? `<button class="icon-btn" data-act="delete" title="Törlés">${icon('trash')}</button>` : ''}
-        <button class="btn ${kind === 'live' || when.soon ? 'btn-primary' : 'btn-ghost'} btn-sm" data-act="join">${kind === 'live' ? 'Belépés' : 'Megnyitás'}</button>
+        ${kind === 'past' ? '' : `<button class="btn ${when.soon ? 'btn-primary' : 'btn-ghost'} btn-sm" data-act="join">Konferencia</button>`}
       </div>
     </div>`;
   }
@@ -678,22 +828,21 @@
       company.theme === 'velyric' ? 'Velyric – MI hangalapú ügynökök · meetingek, célok és jegyzetek egy helyen' : `${company.name} · meetingek, célok és jegyzetek`;
     $('#home-date').textContent = longDate.format(now);
 
-    const live = [];
     const upcoming = [];
     const past = [];
     for (const m of S.meetings.filter((x) => x.companyId === S.companyId)) {
       const { end } = meetingTimes(m);
-      if ((S.live[m.id] || []).length) live.push(m);
-      else if (end > now) upcoming.push(m);
+      if (end > now) upcoming.push(m);
       else past.push(m);
     }
     past.reverse();
 
-    $('#live-section').hidden = !live.length;
-    $('#live-list').innerHTML = live.map((m) => meetingCard(m, 'live')).join('');
+    renderRoomHero();
     $('#upcoming-list').innerHTML = upcoming.length
       ? upcoming.map((m) => meetingCard(m, 'upcoming')).join('')
-      : '<div class="empty">Nincs meghirdetett meeting. Hirdess meg egyet, vagy indíts azonnalit!</div>';
+      : `<div class="empty">${
+          S.user.role === 'CEO' ? 'Nincs meghirdetett meeting – a „Meeting meghirdetése” gombbal tűzhetsz ki egyet.' : 'Még nincs meghirdetett meeting. A szoba ettől függetlenül bármikor nyitva áll.'
+        }</div>`;
     $('#past-section').hidden = !past.length;
     $('#past-count').textContent = past.length ? `(${past.length})` : '';
     $('#past-list').innerHTML = past.slice(0, 30).map((m) => meetingCard(m, 'past')).join('');
@@ -723,7 +872,7 @@
     if ($('#team-list').contains(document.activeElement)) return;
     const liveTitle = (userId) => {
       for (const [roomId, users] of Object.entries(S.live)) {
-        if (users.some((u) => u.id === userId)) return S.meetings.find((m) => m.id === roomId)?.title || 'meetingben';
+        if (users.some((u) => u.id === userId)) return roomId === ROOM_ID ? 'Konferencia' : 'meetingben';
       }
       return null;
     };
@@ -818,9 +967,9 @@
     if (!btn) return;
     const id = btn.closest('.meeting').dataset.id;
     const act = btn.dataset.act;
-    if (act === 'join') location.hash = `#/room/${id}`;
+    if (act === 'join') location.hash = '#/room';
     if (act === 'copy') {
-      await copyText(roomUrl(id));
+      await copyText(roomUrl());
       toast(`${icon('check')} Meghívó link a vágólapon`);
     }
     if (act === 'delete') {
@@ -837,20 +986,6 @@
       });
     }
   });
-
-  $('#btn-instant').addEventListener('click', (e) => busy(e.currentTarget, async () => {
-    try {
-      const m = await api('/api/meetings', {
-        method: 'POST',
-        body: { instant: true, title: `${S.user.name} azonnali meetingje`, companyId: S.companyId },
-      });
-      await copyText(roomUrl(m.id));
-      toast(`${icon('check')} Meeting létrehozva – a link a vágólapon`);
-      location.hash = `#/room/${m.id}`;
-    } catch (e) {
-      toast(esc(e.message), { type: 'error' });
-    }
-  }));
 
   // Meghirdetés dialógus
   const dlg = $('#dlg-schedule');
@@ -888,7 +1023,7 @@
         },
       });
       dlg.close();
-      await copyText(roomUrl(m.id));
+      await copyText(roomUrl());
       toast(`${icon('check')} „${esc(m.title)}” meghirdetve – link a vágólapon`);
       loadMeetings();
     } catch (err) {
@@ -1188,24 +1323,39 @@
   };
   let lobbyMeeting = null;
 
-  async function openLobby(id) {
+  async function openLobby() {
+    let info;
     try {
-      lobbyMeeting = await api(`/api/meetings/${id}`);
+      info = await api('/api/room');
     } catch (e) {
       toast(esc(e.message), { type: 'error' });
       location.hash = '#/';
       return;
     }
-    if (lobbyMeeting.companyId && lobbyMeeting.companyId !== S.companyId) setCompany(lobbyMeeting.companyId, false);
-    lobbyAgenda = lobbyMeeting.agendaItems || [];
+    const active = info.activeMeeting;
+    lobbyMeeting = {
+      id: ROOM_ID,
+      title: 'Konferencia',
+      subtitle: active?.title || '',
+      companyId: active?.companyId || S.companyId,
+      agendaTarget: info.agendaTarget,
+    };
+    if (lobbyMeeting.companyId !== S.companyId) setCompany(lobbyMeeting.companyId, false);
+    lobbyAgenda = info.agendaItems || [];
     renderLobbyAgenda();
     show('lobby');
-    const m = lobbyMeeting;
-    const { start, end } = meetingTimes(m);
-    document.title = `${m.title} – Tárgyaló`;
-    $('#lobby-when').textContent = `${fullDate.format(start)} · ${hm(start)}–${hm(end)}`;
-    $('#lobby-title').textContent = m.title;
-    $('#lobby-desc').textContent = m.description || (m.creator ? `Szervező: ${m.creator.name}` : '');
+    document.title = 'Konferencia – Tárgyaló';
+    if (active) {
+      const { start, end } = meetingTimes(active);
+      $('#lobby-when').textContent = `Most: ${hm(start)}–${hm(end)}`;
+      $('#lobby-title').textContent = active.title;
+      $('#lobby-desc').textContent = active.description || 'A Konferencia szobában';
+    } else {
+      const next = info.nextMeeting;
+      $('#lobby-when').textContent = next ? `Következő: ${fullDate.format(new Date(next.startsAt))} ${hm(new Date(next.startsAt))} – ${next.title}` : 'Mindig nyitva';
+      $('#lobby-title').textContent = 'Konferencia';
+      $('#lobby-desc').textContent = 'A közös szoba – bármikor beléphetsz, a többiek értesítést kapnak.';
+    }
     $('#lobby-avatar').innerHTML = avatar(S.user);
     renderLobbyLive();
     paintLobby();
@@ -1263,8 +1413,9 @@
     call.lastGroup = null;
     stage.innerHTML = '';
     $('#messages').innerHTML = '';
-    $('#room-title').textContent = meeting.title;
-    document.title = `● ${meeting.title} – Tárgyaló`;
+    $('#room-title').textContent = meeting.subtitle ? `Konferencia · ${meeting.subtitle}` : 'Konferencia';
+    document.title = '● Konferencia – Tárgyaló';
+    call.agendaTarget = meeting.agendaTarget;
     show('room');
     paintMusicButtons();
 
@@ -2371,12 +2522,12 @@
 
   async function agendaAction(meetingId, method, path, body = {}) {
     try {
-      const res = await api(`/api/meetings/${meetingId}/agenda${path}`, { method, body: { ...body, inCall: call.id === meetingId } });
-      if (call.id === meetingId) {
+      const res = await api(`/api/meetings/${meetingId}/agenda${path}`, { method, body: { ...body, inCall: !!call.id } });
+      if (call.id && call.agendaTarget === meetingId) {
         call.agenda = res.agenda;
         renderAgenda();
       }
-      if (lobbyMeeting?.id === meetingId) {
+      if (lobbyMeeting?.agendaTarget === meetingId) {
         lobbyAgenda = res.agenda;
         renderLobbyAgenda();
       }
@@ -2408,8 +2559,8 @@
       agendaAction(meetingIdFn(), 'POST', '', { text });
     });
   }
-  bindAgenda('#lobby-agenda', '#agenda-form-lobby', '#agenda-input-lobby', () => lobbyMeeting.id);
-  bindAgenda('#room-agenda', '#agenda-form-room', '#agenda-input-room', () => call.id);
+  bindAgenda('#lobby-agenda', '#agenda-form-lobby', '#agenda-input-lobby', () => lobbyMeeting.agendaTarget);
+  bindAgenda('#room-agenda', '#agenda-form-room', '#agenda-input-room', () => call.agendaTarget || ROOM_ID);
 
   // =========================================================================
   // Jegyzőkönyv – egy kattintással jegyzet a hívásról
@@ -2426,7 +2577,7 @@
         .slice(-150)
         .map((x) => `${hm(new Date(x.ts))} ${x.user.name}: ${x.type === 'file' ? `📎 ${x.file.name}` : x.text}`);
       const body = [
-        `Meeting: ${m.title}`,
+        `Meeting: ${m.subtitle || m.title}`,
         `Cég: ${currentCompany().name}`,
         `Dátum: ${fullDate.format(now)} ${hm(now)}`,
         `Résztvevők: ${people.join(', ')}`,
@@ -2446,7 +2597,7 @@
       ].join('\n');
       try {
         editingNote = { id: null, companyId: S.companyId };
-        $('#note-title').value = `Jegyzőkönyv – ${m.title} (${monthFmt.format(now)} ${now.getDate()}.)`;
+        $('#note-title').value = `Jegyzőkönyv – ${m.subtitle || m.title} (${monthFmt.format(now)} ${now.getDate()}.)`;
         $('#note-body').value = body;
         const res = await saveNote();
         toast(`${icon('check')} Jegyzőkönyv elkészült – a Jegyzetek között megtalálod`);

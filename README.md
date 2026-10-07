@@ -44,8 +44,10 @@ Ezután nyisd meg: http://localhost:3000. Helyben nem kell se Redis, se Blob: az
 
 ## Funkciók
 
-- **Regisztráció:** név, szerep, 4 jegyű kód, majd a kód megismétlése. A regisztráció éles oldalon le van zárva (lásd Biztonság).
-- **Meetingek:** azonnali indítás vagy meghirdetés címmel, napirenddel, időponttal és hosszal. A meghívó link a vágólapra kerül.
+- **Regisztráció:** név → 4 jegyű kód → kód újra → hitelesítő app beállítása. Az új fiók Alkalmazott, és amíg a CEO be nem engedi, csak egy várakozó képernyőt lát.
+- **Egyetlen szoba – Konferencia:** a főoldal közepén; látszik, ki van bent, és mi a mostani vagy a következő meeting. Mindig nyitva áll, link: `/#/room`.
+- **Hozzáférés:** a CEO a kártyán állítja be, hogy *mindenki* bejöhet-e, vagy *csak a kiválasztottak*. A CEO és a CTO mindig bejöhet. A hozzáférés visszavonásakor az illető azonnal kiesik a hívásból is.
+- **Meetingek:** csak a CEO hirdethet meg (cím, időpont, napirend); mind a Konferencia szobában zajlik. A 6 órán belül kezdődő meeting napirendje már a szobában megjelenik, így előre tervezhető.
 - **Élő jelzés:** látod, ki van online, és ki melyik hívásban ül. Ha a másik belép, értesítést kapsz.
 - **Hívás:** mikrofon (`M`), kamera (`V`), képernyőmegosztás (`S`), kiemelt nézet, beszélő kiemelése, reakciók.
 - **Chat és fájlok:** üzenetek és fájlok hívás közben (max 500 MB). Húzd az ablakra, illeszd be, vagy csatold a gemkapoccsal.
@@ -65,7 +67,7 @@ Ezután nyisd meg: http://localhost:3000. Helyben nem kell se Redis, se Blob: az
 - **Fájlok:** privát Blob tárolóban vannak. Csak belépve, egy 5 percig érvényes aláírt linkkel tölthetők le.
 - **Hívás:** csak az a résztvevő csatlakozhat, akit a szerver belépett felhasználóként igazol. A kép és a hang végponttól végpontig titkosítva megy (DTLS-SRTP).
 - **Fejlécek:** szigorú CSP, `X-Frame-Options: DENY`, HSTS, Referrer- és Permissions-Policy.
-- **Kétlépcsős azonosítás (kötelező):** a PIN után a hitelesítő app (Google/Microsoft Authenticator, jelszókezelő) 6 jegyű kódja is kell. Első belépéskor mindenkinek be kell állítania QR-kóddal, és kap 10 egyszer használható helyreállító kódot. A titkos kulcs titkosítva van tárolva, egy kód csak egyszer használható, és a hibás kódokra is vonatkozik a zárolás. Új telefonnál: főoldal → Biztonság → „Új telefon / hitelesítő app”.
+- **Kétlépcsős azonosítás (kötelező):** a PIN után a hitelesítő app (Google/Microsoft Authenticator, jelszókezelő) 6 jegyű kódja is kell. Regisztrációkor egyszer be kell állítani QR-kóddal; utána azon az eszközön elég a PIN, új eszközön egyszer újra kéri, és kap 10 egyszer használható helyreállító kódot. A titkos kulcs titkosítva van tárolva, egy kód csak egyszer használható, és a hibás kódokra is vonatkozik a zárolás. Új telefonnál: főoldal → Biztonság → „Új telefon / hitelesítő app”.
 - **Pajzs gomb** a főoldalon: minden eszköz kiléptetése és a megbízható eszközök törlése, például elveszett telefon esetén.
 
 A `PIN_PEPPER` értékét **soha ne változtasd meg**, különben egyik kód sem fog működni.
@@ -82,7 +84,7 @@ A `PIN_PEPPER` értékét **soha ne változtasd meg**, különben egyik kód sem
 
 | Változó | Alapérték | Leírás |
 |---|---|---|
-| `ALLOW_REGISTRATION` | `true` | `false` = új fiók nem hozható létre |
+| `ALLOW_REGISTRATION` | `true` | `false` = új fiók nem hozható létre (a hozzáférést enélkül is a CEO adja) |
 | `MAX_UPLOAD_MB` | `500` | legnagyobb feltölthető fájl |
 | `FIXED_ROLES` | – | rögzített rangok, pl. `kilian:CEO,krisz:CTO` |
 | `PIN_PEPPER` | – | titkos érték a kódok hash-éhez (Vercelen be van állítva, ne módosítsd) |

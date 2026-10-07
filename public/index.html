@@ -114,6 +114,15 @@
         <p class="form-error" id="login-error"></p>
       </div>
 
+      <!-- Még nincs hozzáférése -->
+      <div class="auth-step" data-step="no-access">
+        <div class="wait-mark" aria-hidden="true"><svg class="i"><use href="#i-lock"/></svg></div>
+        <h1>Várakozás a beengedésre</h1>
+        <p class="muted" id="no-access-text">A fiókod kész. A Konferenciába a CEO enged be – amint megkapod a hozzáférést, ez az oldal magától továbblép.</p>
+        <div class="wait-dots" aria-hidden="true"><i></i><i></i><i></i></div>
+        <button class="btn btn-ghost btn-block" id="no-access-logout" type="button"><svg class="i"><use href="#i-logout"/></svg>Kijelentkezés</button>
+      </div>
+
       <!-- Belépés 2. lépés: hitelesítő app kódja -->
       <div class="auth-step" data-step="login-totp">
         <button class="link-back" data-go="pick"><svg class="i"><use href="#i-back"/></svg>Vissza</button>
@@ -237,31 +246,31 @@
         <p class="hero-sub" id="home-company"></p>
       </div>
 
-      <div class="actions">
-        <button class="action-card action-primary" id="btn-instant">
-          <div class="action-icon"><svg class="i"><use href="#i-zap"/></svg></div>
-          <div>
-            <div class="action-title">Azonnali meeting</div>
-            <div class="action-sub">Indíts most egy hívást, és küldd el a linket</div>
-          </div>
-        </button>
-        <button class="action-card" id="btn-schedule">
-          <div class="action-icon"><svg class="i"><use href="#i-calendar"/></svg></div>
-          <div>
-            <div class="action-title">Meeting meghirdetése</div>
-            <div class="action-sub">Adj nevet, időpontot és napirendet</div>
-          </div>
-        </button>
-      </div>
+      <!-- Az egyetlen szoba -->
+      <section class="room-hero" id="room-hero" aria-labelledby="room-hero-title">
+        <div class="room-hero-glow" aria-hidden="true"></div>
+        <div class="room-hero-top">
+          <span class="room-status" id="room-status"><span class="pulse"></span><span id="room-status-text">Csendes</span></span>
+          <button class="access-btn" id="btn-access" type="button" hidden>
+            <svg class="i"><use href="#i-lock"/></svg><span id="access-label">Hozzáférés</span><span class="badge-inline" id="access-waiting" hidden></span>
+          </button>
+        </div>
+        <h2 class="room-hero-title" id="room-hero-title">Konferencia</h2>
+        <div class="room-hero-people" id="room-people"></div>
+        <div class="room-hero-meta" id="room-meeting"></div>
+        <div class="room-hero-actions">
+          <button class="btn btn-primary btn-lg" id="btn-enter-room" type="button"><svg class="i"><use href="#i-cam"/></svg>Belépés a konferenciába</button>
+          <button class="btn btn-ghost" id="btn-copy-home" type="button"><svg class="i"><use href="#i-link"/></svg>Link másolása</button>
+        </div>
+      </section>
 
       <div class="home-grid">
         <div class="home-col">
-          <div id="live-section" class="section" hidden>
-            <h2 class="section-title"><span class="live-dot"></span>Élő most</h2>
-            <div id="live-list" class="meeting-list"></div>
-          </div>
           <div class="section">
-            <h2 class="section-title">Következő meetingek</h2>
+            <div class="section-head">
+              <h2 class="section-title">Következő meetingek</h2>
+              <button class="btn btn-sm btn-ghost" id="btn-schedule" type="button" hidden><svg class="i"><use href="#i-calendar"/></svg>Meeting meghirdetése</button>
+            </div>
             <div id="upcoming-list" class="meeting-list"></div>
           </div>
           <details class="section past" id="past-section">
@@ -506,6 +515,26 @@
       <div class="dialog-foot">
         <button type="button" class="btn btn-ghost" id="note-delete"><svg class="i"><use href="#i-trash"/></svg>Törlés</button>
         <span class="spacer"></span>
+        <button type="button" class="btn btn-ghost" data-close>Mégse</button>
+        <button type="submit" class="btn btn-primary"><svg class="i"><use href="#i-check"/></svg>Mentés</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- ============================ HOZZÁFÉRÉS ============================ -->
+  <dialog id="dlg-access" class="dialog">
+    <form id="access-form" class="stack">
+      <div class="dialog-head">
+        <h2>Ki jöhet be?</h2>
+        <button type="button" class="icon-btn" data-close><svg class="i"><use href="#i-x"/></svg></button>
+      </div>
+      <div class="segmented two" id="access-mode" role="radiogroup" aria-label="Hozzáférés">
+        <button type="button" data-mode="all" role="radio">Mindenki</button>
+        <button type="button" data-mode="list" role="radio">Csak kiválasztottak</button>
+      </div>
+      <p class="muted access-hint" id="access-hint"></p>
+      <div class="access-list" id="access-list"></div>
+      <div class="dialog-foot">
         <button type="button" class="btn btn-ghost" data-close>Mégse</button>
         <button type="submit" class="btn btn-primary"><svg class="i"><use href="#i-check"/></svg>Mentés</button>
       </div>

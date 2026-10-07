@@ -1327,3 +1327,129 @@ body[data-theme='velyric'] .mine .bubble { background: var(--cta); }
 body[data-theme='velyric'] .rec-dot { background: #ff2b91; box-shadow: 0 0 12px #ff2b91; }
 body[data-theme='velyric'] .dialog { border-radius: 24px; background: #11131a; }
 body[data-theme='velyric'] .toast { border-radius: 999px; background: #17131b; }
+
+
+/* ======================================================================
+   A Konferencia szoba (főoldal), hozzáférés, várakozás
+   ====================================================================== */
+.room-hero {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 28px 30px;
+  margin-bottom: 40px;
+  border-radius: 24px;
+  background: var(--surface);
+  border: 1px solid var(--line-2);
+  box-shadow: var(--shadow);
+}
+.room-hero-glow {
+  position: absolute;
+  inset: -40% -10% auto auto;
+  width: 520px;
+  height: 520px;
+  z-index: -1;
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--accent-soft), transparent 65%);
+  transition: opacity 0.4s;
+  opacity: 0.7;
+}
+.room-hero.is-live { border-color: color-mix(in srgb, var(--green) 45%, var(--line-2)); }
+.room-hero.is-live .room-hero-glow { opacity: 1; }
+.room-hero-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.room-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.room-status .pulse { width: 8px; height: 8px; border-radius: 50%; background: var(--text-3); }
+.room-hero.is-live .room-status { color: var(--green); }
+.room-hero.is-live .pulse { background: var(--green); box-shadow: 0 0 0 0 color-mix(in srgb, var(--green) 60%, transparent); animation: livePulse 1.8s infinite; }
+@keyframes livePulse { 70% { box-shadow: 0 0 0 9px transparent; } 100% { box-shadow: 0 0 0 0 transparent; } }
+.room-hero-title { font-size: clamp(32px, 4.2vw, 48px); line-height: 1.05; letter-spacing: -0.03em; }
+.room-hero-people { display: flex; align-items: center; gap: 12px; min-height: 36px; color: var(--text-2); font-size: 15px; }
+.room-hero-people .stack-avatars .avatar { width: 34px; height: 34px; font-size: 13px; border-color: var(--surface); margin-left: -8px; }
+.room-hero-people .stack-avatars .avatar:first-child { margin-left: 0; }
+.room-hero-people b { color: var(--text); }
+.room-hero-meta { display: flex; flex-wrap: wrap; gap: 8px; }
+.meta-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  font-size: 13px;
+  color: var(--text-2);
+}
+.meta-chip b { color: var(--text); font-weight: 600; }
+.meta-chip .i { width: 15px; height: 15px; }
+.meta-chip.now { border-color: color-mix(in srgb, var(--accent) 50%, var(--line)); color: var(--accent-2); }
+.room-hero-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 6px; }
+.room-hero-actions .btn-lg { min-width: 260px; }
+.room-hero-actions .btn-lg .i { width: 20px; height: 20px; }
+.room-hero-actions .btn-lg { transition: transform 0.15s, box-shadow 0.2s, filter 0.15s; }
+.room-hero-actions .btn-lg:hover { transform: translateY(-1px); }
+
+.access-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid var(--line-2);
+  background: var(--surface-2);
+  color: var(--text-2);
+  font-size: 13px;
+  font-weight: 600;
+  transition: border-color 0.15s, color 0.15s;
+}
+.access-btn:hover { color: var(--text); border-color: var(--accent); }
+.access-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.access-btn .i { width: 15px; height: 15px; }
+.badge-inline { min-width: 20px; height: 20px; padding: 0 6px; border-radius: 10px; background: var(--amber); color: #111; font-size: 11px; font-weight: 800; line-height: 20px; text-align: center; }
+
+.section-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+.section-head .section-title { margin: 0; }
+
+.segmented.two { grid-template-columns: 1fr 1fr; }
+.segmented button[aria-checked='true'] { background: var(--surface-3); color: var(--text); box-shadow: 0 1px 0 var(--line-2) inset; }
+.access-hint { margin: 0; font-size: 13px; }
+.access-list { display: flex; flex-direction: column; gap: 2px; max-height: 340px; overflow-y: auto; }
+.access-row { display: flex; align-items: center; gap: 12px; padding: 8px; border-radius: 12px; cursor: pointer; }
+.access-row:hover { background: var(--surface-2); }
+.access-row input { width: 18px; height: 18px; accent-color: var(--accent); flex: none; }
+.access-row .who { flex: 1; min-width: 0; }
+.access-row .name { font-weight: 600; font-size: 14px; }
+.access-row .sub { font-size: 12px; color: var(--text-3); }
+.access-row.fixed { cursor: default; opacity: 0.75; }
+.access-row .new { color: var(--amber); font-weight: 600; }
+.access-list.disabled .access-row:not(.fixed) { opacity: 0.45; pointer-events: none; }
+
+.wait-mark { display: grid; place-items: center; width: 56px; height: 56px; border-radius: 18px; background: var(--accent-soft); color: var(--accent-2); }
+.wait-mark .i { width: 26px; height: 26px; }
+.wait-dots { display: flex; gap: 6px; margin: 4px 0 8px; }
+.wait-dots i { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); opacity: 0.3; animation: waitDot 1.4s infinite ease-in-out; }
+.wait-dots i:nth-child(2) { animation-delay: 0.2s; }
+.wait-dots i:nth-child(3) { animation-delay: 0.4s; }
+@keyframes waitDot { 40% { opacity: 1; transform: translateY(-3px); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .room-hero.is-live .pulse, .wait-dots i { animation: none; }
+  .room-hero-actions .btn-lg:hover { transform: none; }
+}
+@media (max-width: 640px) {
+  .room-hero { padding: 22px 18px; border-radius: 20px; }
+  .room-hero-actions .btn-lg { min-width: 0; flex: 1 1 100%; }
+  .room-hero-actions .btn-ghost { flex: 1 1 100%; }
+}
