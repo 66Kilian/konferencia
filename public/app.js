@@ -413,9 +413,12 @@
 
   function renderSecurityPanel() {
     const m = S.mfa || {};
-    $('#mfa-status').textContent = m.enabled
-      ? `Kétlépcsős azonosítás bekapcsolva · ${m.recoveryLeft} helyreállító kód maradt`
-      : 'Kétlépcsős azonosítás kikapcsolva';
+    $('#btn-mfa-reset').hidden = !m.required;
+    $('#mfa-status').textContent = !m.required
+      ? 'A belépéshez a neved és a 4 jegyű kódod kell.'
+      : m.enabled
+        ? `Kétlépcsős azonosítás bekapcsolva · ${m.recoveryLeft} helyreállító kód maradt`
+        : 'Kétlépcsős azonosítás kikapcsolva';
   }
 
   $('#btn-mfa-reset').addEventListener('click', () => {
@@ -455,7 +458,11 @@
         body: { name: reg.name, pin: reg.pin, pin2: pin },
       });
       pinReg2.ok();
-      toast(`${icon('check')} Fiók létrehozva. Most kapcsold be a kétlépcsős azonosítást.`);
+      toast(
+        res.mfa?.required
+          ? `${icon('check')} Fiók létrehozva. Most kapcsold be a kétlépcsős azonosítást.`
+          : `${icon('check')} Fiók létrehozva. Üdv, ${esc(res.user.name)}!`
+      );
       setTimeout(() => setSession(res), 250);
     } catch (e) {
       err.textContent = e.message;
